@@ -65,19 +65,28 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
         // ── 2. Enter ESC/P Raster mode ───────────────────────────────────────
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)
 
-        // ── 3. MONOCHROME mode (CRITICAL for color inkjets) ──────────────────
-        // Without ESC(K, L1455 stays in CMYK multi-plane mode and waits for
-        // 3 extra color planes after each K-plane line → printer gets stuck.
+        // ── 3. MONOCHROME mode ───────────────────────────────────────────────
+        // Without ESC(K, L1455 stays in CMYK mode and waits for 3 more planes.
         result += byteArrayOf(ESC, 0x28, 0x4B, 0x02, 0x00, 0x00, 0x00)
 
-        // ── 4. Set unit: 1 unit = 1/dpi inch  (ESC(U uses 1/3600 inch base) ──
+        // ── 4. Set unit (ESC(U uses 1/3600 inch base) ────────────────────────
         result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)
 
-        // ── 5. Set page height so FF is honoured after last raster line ───────
+        // ── 5. Set resolution (ESC(D) — required by some Epson firmware ───────
+        // base=720, hRes=720/dpi, vRes=720/dpi
+        val hv = (720 / dpi)
+        result += byteArrayOf(
+            ESC, 0x28, 0x44, 0x06, 0x00,
+            (720 and 0xFF).toByte(), ((720 shr 8) and 0xFF).toByte(),  // base=720 LE
+            (hv and 0xFF).toByte(), ((hv shr 8) and 0xFF).toByte(),    // hRes LE
+            (hv and 0xFF).toByte(), ((hv shr 8) and 0xFF).toByte()     // vRes LE
+        )
+
+        // ── 6. Set page height so FF is honoured after last raster line ───────
         result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)
         result += int32LE(height)
 
-        // ── 5. Raster lines ──────────────────────────────────────────────────
+        // ── 7. Raster lines ──────────────────────────────────────────────────
         val rowPixels = IntArray(width)
         for (y in 0 until height) {
             bitmap.getPixels(rowPixels, 0, width, 0, y, width, 1)
@@ -94,7 +103,7 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
             result += lineData
         }
 
-        // ── 6. Eject page ─────────────────────────────────────────────────────
+        // ── 8. Eject page ─────────────────────────────────────────────────────
         result += FF
 
         return result.toByteArray()
