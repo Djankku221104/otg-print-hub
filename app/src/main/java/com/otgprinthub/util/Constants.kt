@@ -4,7 +4,7 @@ object Constants {
     const val ACTION_USB_PERMISSION = "com.otgprinthub.USB_PERMISSION"
 
     const val GITHUB_DRIVER_DB_URL =
-        "https://raw.githubusercontent.com/otgprinthub/drivers/main/drivers.json"
+        "https://raw.githubusercontent.com/Djankku221104/otg-print-hub/main/drivers.json"
 
     const val OPENPRINTING_BASE_URL = "https://www.openprinting.org/"
     const val FOOMATIC_BASE_URL = "https://raw.githubusercontent.com/OpenPrinting/foomatic-db/master/"

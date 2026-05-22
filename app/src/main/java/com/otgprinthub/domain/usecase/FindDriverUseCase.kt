@@ -7,6 +7,7 @@ import com.otgprinthub.domain.model.PrintProtocol
 import com.otgprinthub.domain.repository.DriverRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 class FindDriverUseCase @Inject constructor(
@@ -44,9 +45,9 @@ class FindDriverUseCase @Inject constructor(
 
         // Layer 2: GitHub DB
         emit(DriverSearchState.SearchingGithubDb)
-        runCatching {
-            driverRepository.searchDriverInGithubDb(vid, pid)
-        }.getOrNull()?.let { driver ->
+        withTimeoutOrNull(12_000L) {
+            runCatching { driverRepository.searchDriverInGithubDb(vid, pid) }.getOrNull()
+        }?.let { driver ->
             val id = driverRepository.saveDriver(driver)
             emit(DriverSearchState.DriverFound(driver.copy(id = id)))
             return@flow
@@ -55,9 +56,11 @@ class FindDriverUseCase @Inject constructor(
         // Layer 3: OpenPrinting.org
         emit(DriverSearchState.CheckingOpenPrinting)
         if (printer.brandName != "Unknown") {
-            runCatching {
-                driverRepository.searchDriverInOpenPrinting(printer.brandName, printer.modelName)
-            }.getOrNull()?.let { driver ->
+            withTimeoutOrNull(12_000L) {
+                runCatching {
+                    driverRepository.searchDriverInOpenPrinting(printer.brandName, printer.modelName)
+                }.getOrNull()
+            }?.let { driver ->
                 val id = driverRepository.saveDriver(driver)
                 emit(DriverSearchState.DriverFound(driver.copy(id = id)))
                 return@flow
