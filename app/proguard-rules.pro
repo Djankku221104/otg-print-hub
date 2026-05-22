@@ -25,6 +25,7 @@
 
 # Jsoup
 -keep class org.jsoup.** { *; }
+-dontwarn org.jspecify.annotations.**
 
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
