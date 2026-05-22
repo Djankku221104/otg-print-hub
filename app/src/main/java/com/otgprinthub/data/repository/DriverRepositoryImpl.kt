@@ -62,6 +62,16 @@ class DriverRepositoryImpl @Inject constructor(
     }
 
     override suspend fun searchDriverInOpenPrinting(brand: String, model: String): Driver? {
+        // Try OpenPrinting REST API first
+        try {
+            val apiResponse = openPrintingApi.searchPrinters(brand, model)
+            if (apiResponse.isSuccessful) {
+                val json = apiResponse.body()?.string() ?: ""
+                parseOpenPrintingApiResponse(json, brand, model)?.let { return it }
+            }
+        } catch (_: Exception) {}
+
+        // Fall back to HTML scraping
         return try {
             val cleanModel = model.replace(" ", "_").replace("/", "-")
             val url = "${Constants.OPENPRINTING_BASE_URL}printer/$brand/$cleanModel"
@@ -72,6 +82,33 @@ class DriverRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun parseOpenPrintingApiResponse(json: String, brand: String, model: String): Driver? {
+        return try {
+            val obj = org.json.JSONObject(json)
+            val printers = obj.optJSONObject("printers") ?: return null
+            val keys = printers.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val entry = printers.getJSONObject(key)
+                val entryModel = entry.optString("model", "")
+                if (entryModel.contains(model, ignoreCase = true) ||
+                    model.contains(entryModel, ignoreCase = true)) {
+                    val driverName = entry.optString("driver", "")
+                    val ppdUrl = entry.optString("ppd", null)
+                    return Driver(
+                        vid = "0000", pid = "0000",
+                        brand = brand, model = model,
+                        protocol = inferProtocolFromDriverName(driverName),
+                        ppdUrl = ppdUrl,
+                        source = DriverSource.OPENPRINTING,
+                        notes = "OpenPrinting: $driverName"
+                    )
+                }
+            }
+            null
+        } catch (_: Exception) { null }
     }
 
     override suspend fun downloadPpd(ppdUrl: String, vid: String, pid: String): String? {

@@ -7,14 +7,24 @@ import retrofit2.http.Query
 import retrofit2.http.Url
 
 interface OpenPrintingApi {
+    // Generic URL fetch — used for HTML scraping fallback
     @GET
     suspend fun getPrinterPage(@Url url: String): Response<ResponseBody>
 
-    @GET("ppd-o-matic.php")
-    suspend fun downloadPpd(
-        @Query("driver") driver: String,
-        @Query("printer") printer: String,
-        @Query("show") show: String = "0"
+    // OpenPrinting REST API — returns JSON
+    @GET("api/1.0/json/printer_list")
+    suspend fun searchPrinters(
+        @Query("make") make: String,
+        @Query("model") model: String,
+        @Query("limit") limit: Int = 5
+    ): Response<ResponseBody>
+
+    // Foomatic driver lookup by printer make+model
+    @GET("api/1.0/json/driver_list")
+    suspend fun getDriversForPrinter(
+        @Query("make") make: String,
+        @Query("model") model: String,
+        @Query("limit") limit: Int = 3
     ): Response<ResponseBody>
 }
 

@@ -131,6 +131,14 @@ class UsbPrinterManager @Inject constructor(
         )
     }
 
+    fun updateConnectedPrinterDriver(driverId: Long) {
+        _connectedPrinter.value = _connectedPrinter.value?.copy(
+            hasDriver = true,
+            driverId = driverId,
+            status = PrinterStatus.DRIVER_FOUND
+        )
+    }
+
     fun getDeviceDescriptor(printer: Printer): Map<String, Any>? {
         val device = usbManager.deviceList.values
             .firstOrNull { it.deviceName == printer.deviceName } ?: return null

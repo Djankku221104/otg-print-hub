@@ -20,6 +20,7 @@ import androidx.navigation.NavController
 import com.otgprinthub.domain.model.FileType
 import com.otgprinthub.domain.model.JobStatus
 import com.otgprinthub.domain.model.PrinterStatus
+import com.otgprinthub.domain.usecase.FindDriverUseCase
 import com.otgprinthub.ui.components.PrintJobItem
 import com.otgprinthub.ui.components.PrinterStatusCard
 import com.otgprinthub.ui.navigation.Screen
@@ -34,6 +35,7 @@ fun HomeScreen(
 ) {
     val printer by viewModel.connectedPrinter.collectAsStateWithLifecycle()
     val recentJobs by viewModel.recentJobs.collectAsStateWithLifecycle()
+    val driverSearchState by viewModel.autoDriverSearchState.collectAsStateWithLifecycle()
 
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -89,6 +91,47 @@ fun HomeScreen(
                         navController.navigate(Screen.PrinterDetails.createRoute(p.id))
                     }
                 )
+            }
+
+            // Auto driver search status banner
+            val searchMsg = when (driverSearchState) {
+                is FindDriverUseCase.DriverSearchState.CheckingLocalCache -> "Checking cached drivers..."
+                is FindDriverUseCase.DriverSearchState.SearchingGithubDb -> "Searching online driver database..."
+                is FindDriverUseCase.DriverSearchState.CheckingOpenPrinting -> "Checking OpenPrinting.org..."
+                is FindDriverUseCase.DriverSearchState.TryingGenericDrivers -> "Applying generic driver..."
+                is FindDriverUseCase.DriverSearchState.DriverFound -> "Driver found: ${(driverSearchState as FindDriverUseCase.DriverSearchState.DriverFound).driver.model}"
+                is FindDriverUseCase.DriverSearchState.DriverNotFound -> "No specific driver found — using generic mode"
+                else -> null
+            }
+            if (searchMsg != null) {
+                item {
+                    val isSearching = driverSearchState !is FindDriverUseCase.DriverSearchState.DriverFound &&
+                            driverSearchState !is FindDriverUseCase.DriverSearchState.DriverNotFound
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSearching)
+                                MaterialTheme.colorScheme.secondaryContainer
+                            else
+                                MaterialTheme.colorScheme.primaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (isSearching) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary)
+                            }
+                            Text(searchMsg, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
             }
 
             item {
