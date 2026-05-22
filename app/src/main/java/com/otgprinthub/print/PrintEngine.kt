@@ -65,8 +65,11 @@ class PrintEngine @Inject constructor(
                 }
                 FileType.IMAGE -> renderImageToPrintData(fileUri, adapter, job.settings)
                 FileType.TEXT -> {
-                    val text = context.contentResolver.openInputStream(fileUri)?.bufferedReader()?.readText()
-                        ?: throw Exception("Cannot read text file")
+                    val text = if (fileUri.scheme == "file")
+                        java.io.File(fileUri.path!!).readText()
+                    else
+                        context.contentResolver.openInputStream(fileUri)?.bufferedReader()?.readText()
+                            ?: throw Exception("Cannot read text file")
                     adapter.buildTextData(text, job.settings)
                 }
                 FileType.UNKNOWN -> throw Exception("Unsupported file type")

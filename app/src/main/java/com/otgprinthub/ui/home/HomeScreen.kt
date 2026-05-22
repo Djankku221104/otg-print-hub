@@ -27,7 +27,11 @@ import com.otgprinthub.ui.components.PrintJobItem
 import com.otgprinthub.ui.components.PrinterStatusCard
 import com.otgprinthub.ui.navigation.Screen
 import com.otgprinthub.util.toVidPidString
+import java.io.File
 import java.net.URLEncoder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,19 +40,44 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val printer by viewModel.connectedPrinter.collectAsStateWithLifecycle()
     val recentJobs by viewModel.recentJobs.collectAsStateWithLifecycle()
     val driverSearchState by viewModel.autoDriverSearchState.collectAsStateWithLifecycle()
 
     fun persistAndNavigate(uri: Uri, fileType: FileType) {
-        // Take persistable permission so ApplicationContext can read this URI later
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {}
-        val encoded = URLEncoder.encode(uri.toString(), "UTF-8")
-        navController.navigate(Screen.PrintPreview.createRoute(encoded, fileType.name))
+        scope.launch {
+            // Try persistent permission first (fast path, works on most devices)
+            val permOk = runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }.isSuccess
+
+            val finalUri = if (permOk) {
+                uri
+            } else {
+                // Permission didn't persist — copy to private cache so
+                // @ApplicationContext can read it without a URI grant
+                val ext = when (fileType) {
+                    FileType.PDF -> ".pdf"
+                    FileType.IMAGE -> ".jpg"
+                    FileType.TEXT -> ".txt"
+                    else -> ".bin"
+                }
+                withContext(Dispatchers.IO) {
+                    try {
+                        val dest = File(context.cacheDir, "printjob_${System.currentTimeMillis()}$ext")
+                        context.contentResolver.openInputStream(uri)
+                            ?.use { it.copyTo(dest.outputStream()) }
+                        Uri.fromFile(dest)
+                    } catch (_: Exception) { uri }
+                }
+            }
+
+            val encoded = URLEncoder.encode(finalUri.toString(), "UTF-8")
+            navController.navigate(Screen.PrintPreview.createRoute(encoded, fileType.name))
+        }
     }
 
     val pdfLauncher = rememberLauncherForActivityResult(

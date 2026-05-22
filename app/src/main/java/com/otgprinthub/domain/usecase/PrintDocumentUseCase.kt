@@ -40,17 +40,23 @@ class PrintDocumentUseCase @Inject constructor(
     }
 
     private fun getFileName(uri: Uri): String {
-        return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            cursor.moveToFirst()
-            cursor.getString(nameIndex)
-        } ?: uri.lastPathSegment ?: "Unknown File"
+        if (uri.scheme == "file") return java.io.File(uri.path!!).name
+        return runCatching {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment ?: "Unknown File"
     }
 
     private fun getFileType(uri: Uri): FileType {
-        val mimeType = context.contentResolver.getType(uri) ?: ""
+        val ext = uri.lastPathSegment?.substringAfterLast('.', "") ?: ""
+        if (ext.isNotEmpty()) {
+            val fromExt = FileType.fromExtension(ext)
+            if (fromExt != FileType.UNKNOWN) return fromExt
+        }
+        val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: ""
         if (mimeType.isNotEmpty()) return FileType.fromMimeType(mimeType)
-        val ext = uri.lastPathSegment?.substringAfterLast('.') ?: ""
-        return FileType.fromExtension(ext)
+        return FileType.UNKNOWN
     }
 }

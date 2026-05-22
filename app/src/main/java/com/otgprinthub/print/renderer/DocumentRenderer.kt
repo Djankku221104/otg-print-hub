@@ -10,6 +10,8 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
+import java.io.File
+import java.io.InputStream
 import com.otgprinthub.domain.model.ColorMode
 import com.otgprinthub.domain.model.FitMode
 import com.otgprinthub.domain.model.Orientation
@@ -23,9 +25,21 @@ import javax.inject.Singleton
 class DocumentRenderer @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private fun openDescriptor(uri: Uri): ParcelFileDescriptor? =
+        if (uri.scheme == "file")
+            runCatching { ParcelFileDescriptor.open(File(uri.path!!), ParcelFileDescriptor.MODE_READ_ONLY) }.getOrNull()
+        else
+            runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
+
+    private fun openStream(uri: Uri): InputStream? =
+        if (uri.scheme == "file")
+            runCatching { File(uri.path!!).inputStream() }.getOrNull()
+        else
+            runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()
+
     suspend fun renderPdf(uri: Uri, settings: PrintSettings): List<Bitmap> {
         val pages = mutableListOf<Bitmap>()
-        val descriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: return pages
+        val descriptor = openDescriptor(uri) ?: return pages
 
         descriptor.use { fd ->
             PdfRenderer(fd).use { renderer ->
@@ -52,7 +66,7 @@ class DocumentRenderer @Inject constructor(
         val options = BitmapFactory.Options().apply {
             inJustDecodeBounds = true
         }
-        context.contentResolver.openInputStream(uri)?.use { stream ->
+        openStream(uri)?.use { stream ->
             BitmapFactory.decodeStream(stream, null, options)
         }
 
@@ -65,7 +79,7 @@ class DocumentRenderer @Inject constructor(
             inPreferredConfig = Bitmap.Config.RGB_565
         }
 
-        val rawBitmap = context.contentResolver.openInputStream(uri)?.use { stream ->
+        val rawBitmap = openStream(uri)?.use { stream ->
             BitmapFactory.decodeStream(stream, null, decodeOptions)
         } ?: return createWhiteBitmap(targetWidth, targetHeight)
 
