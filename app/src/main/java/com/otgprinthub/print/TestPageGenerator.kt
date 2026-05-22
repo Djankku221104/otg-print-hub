@@ -79,6 +79,7 @@ object TestPageGenerator {
         val result = mutableListOf<Byte>()
         result += byteArrayOf(ESC, 0x40)                               // reset
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)      // raster mode
+        result += byteArrayOf(ESC, 0x28, 0x4B, 0x02, 0x00, 0x00, 0x00) // ESC(K monochrome
         result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)     // set unit = 1/dpi inch
         result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)            // page height:
         result += int32LE(lines)                                        //   30 units = 30 lines
@@ -109,6 +110,7 @@ object TestPageGenerator {
         val result = mutableListOf<Byte>()
         result += byteArrayOf(ESC, 0x40)
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)
+        result += byteArrayOf(ESC, 0x28, 0x4B, 0x02, 0x00, 0x00, 0x00) // ESC(K monochrome
         result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)
         result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)
         result += int32LE(totalLines)

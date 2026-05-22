@@ -65,13 +65,17 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
         // ── 2. Enter ESC/P Raster mode ───────────────────────────────────────
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)
 
-        // ── 3. Set unit: 1 unit = 1/dpi inch  (ESC(U uses 1/3600 inch base) ──
+        // ── 3. MONOCHROME mode (CRITICAL for color inkjets) ──────────────────
+        // Without ESC(K, L1455 stays in CMYK multi-plane mode and waits for
+        // 3 extra color planes after each K-plane line → printer gets stuck.
+        result += byteArrayOf(ESC, 0x28, 0x4B, 0x02, 0x00, 0x00, 0x00)
+
+        // ── 4. Set unit: 1 unit = 1/dpi inch  (ESC(U uses 1/3600 inch base) ──
         result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)
 
-        // ── 4. Set page height (CRITICAL — without this, printer waits for a ──
-        //       full default page and ignores FF mid-stream)
+        // ── 5. Set page height so FF is honoured after last raster line ───────
         result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)
-        result += int32LE(height)   // height in units == height in pixels (since unitD = 3600/dpi)
+        result += int32LE(height)
 
         // ── 5. Raster lines ──────────────────────────────────────────────────
         val rowPixels = IntArray(width)
