@@ -11,6 +11,7 @@ import com.otgprinthub.domain.model.PrintSettings
 import com.otgprinthub.domain.repository.PrintJobRepository
 import com.otgprinthub.print.adapters.DirectPdfAdapter
 import com.otgprinthub.print.adapters.EscPAdapter
+import com.otgprinthub.print.adapters.EscP2Adapter
 import com.otgprinthub.print.adapters.EscPosAdapter
 import com.otgprinthub.print.adapters.GenericFallbackAdapter
 import com.otgprinthub.print.adapters.PclAdapter
@@ -134,7 +135,8 @@ class PrintEngine @Inject constructor(
         return when (driver.protocol) {
             PrintProtocol.ESCPOS -> EscPosAdapter(driver)
             PrintProtocol.PCL5, PrintProtocol.PCL6, PrintProtocol.PCL3 -> PclAdapter(driver)
-            PrintProtocol.ESCP, PrintProtocol.ESCP2 -> EscPAdapter(driver)
+            PrintProtocol.ESCP -> EscPAdapter(driver)
+            PrintProtocol.ESCP2 -> EscP2Adapter(driver)
             PrintProtocol.POSTSCRIPT, PrintProtocol.POSTSCRIPT3 -> PostScriptAdapter(driver)
             PrintProtocol.DIRECT_PDF -> DirectPdfAdapter(driver, context)
             PrintProtocol.RAW -> RawTextAdapter(driver)
