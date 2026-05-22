@@ -151,21 +151,21 @@ fun HomeScreen(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.PictureAsPdf,
                         label = "Print PDF",
-                        enabled = printer?.status == PrinterStatus.READY || printer?.status == PrinterStatus.DRIVER_FOUND,
+                        enabled = printer != null,
                         onClick = { pdfLauncher.launch(arrayOf("application/pdf")) }
                     )
                     QuickActionButton(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Image,
                         label = "Print Image",
-                        enabled = printer?.status == PrinterStatus.READY || printer?.status == PrinterStatus.DRIVER_FOUND,
+                        enabled = printer != null,
                         onClick = { imageLauncher.launch(arrayOf("image/*")) }
                     )
                     QuickActionButton(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.TextFields,
                         label = "Print Text",
-                        enabled = printer?.status == PrinterStatus.READY || printer?.status == PrinterStatus.DRIVER_FOUND,
+                        enabled = printer != null,
                         onClick = { textLauncher.launch(arrayOf("text/*")) }
                     )
                 }
