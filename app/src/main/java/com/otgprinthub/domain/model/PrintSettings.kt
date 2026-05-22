@@ -52,10 +52,10 @@ enum class ColorMode(val displayName: String) {
 }
 
 enum class PrintQuality(val displayName: String, val dpi: Int) {
-    DRAFT("Draft", 150),
-    NORMAL("Normal", 300),
-    HIGH("High", 600),
-    BEST("Best", 1200)
+    DRAFT("Draft", 180),
+    NORMAL("Normal", 360),
+    HIGH("High", 720),
+    BEST("Best", 720)
 }
 
 enum class FitMode(val displayName: String) {
