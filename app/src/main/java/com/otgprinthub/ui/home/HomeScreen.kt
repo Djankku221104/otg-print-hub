@@ -1,8 +1,10 @@
 package com.otgprinthub.ui.home
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,36 +35,33 @@ fun HomeScreen(
     navController: NavController,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val printer by viewModel.connectedPrinter.collectAsStateWithLifecycle()
     val recentJobs by viewModel.recentJobs.collectAsStateWithLifecycle()
     val driverSearchState by viewModel.autoDriverSearchState.collectAsStateWithLifecycle()
 
+    fun persistAndNavigate(uri: Uri, fileType: FileType) {
+        // Take persistable permission so ApplicationContext can read this URI later
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: SecurityException) {}
+        val encoded = URLEncoder.encode(uri.toString(), "UTF-8")
+        navController.navigate(Screen.PrintPreview.createRoute(encoded, fileType.name))
+    }
+
     val pdfLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            val encoded = URLEncoder.encode(it.toString(), "UTF-8")
-            navController.navigate(Screen.PrintPreview.createRoute(encoded, FileType.PDF.name))
-        }
-    }
+    ) { uri: Uri? -> uri?.let { persistAndNavigate(it, FileType.PDF) } }
 
     val imageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            val encoded = URLEncoder.encode(it.toString(), "UTF-8")
-            navController.navigate(Screen.PrintPreview.createRoute(encoded, FileType.IMAGE.name))
-        }
-    }
+    ) { uri: Uri? -> uri?.let { persistAndNavigate(it, FileType.IMAGE) } }
 
     val textLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            val encoded = URLEncoder.encode(it.toString(), "UTF-8")
-            navController.navigate(Screen.PrintPreview.createRoute(encoded, FileType.TEXT.name))
-        }
-    }
+    ) { uri: Uri? -> uri?.let { persistAndNavigate(it, FileType.TEXT) } }
 
     Scaffold(
         topBar = {
