@@ -20,15 +20,16 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Gradle 8.5
-        run: |
-          curl -fsSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.5-bin.zip
-          unzip -q /tmp/gradle.zip -d /opt
-          echo "/opt/gradle-8.5/bin" >> $GITHUB_PATH
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
+          validate-wrappers: false
 
       - name: Build Debug APK
         run: gradle assembleDebug --stacktrace
@@ -56,4 +57,4 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Skip signing (no keystore configured)
-        run: echo "Signed APK step skipped. Configure KEYSTORE_FILE secret to enable signing."
+        run: echo "Signed APK step skipped."
