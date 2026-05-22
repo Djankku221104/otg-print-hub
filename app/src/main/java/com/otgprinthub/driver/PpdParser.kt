@@ -78,7 +78,7 @@ class PpdParser @Inject constructor() {
         return PrinterCapabilities(
             printerName = keyValues["PCFileName"]?.removeSuffix(".PPD") ?: "",
             manufacturer = keyValues["Manufacturer"] ?: "",
-            modelName = keyValues["ModelName"] ?: keyValues["Product"]?.trim("()") ?: "",
+            modelName = keyValues["ModelName"] ?: keyValues["Product"]?.trim('(', ')') ?: "",
             colorDevice = keyValues["ColorDevice"]?.equals("True", ignoreCase = true) ?: false,
             defaultResolution = defaultResolution,
             availableResolutions = resolutions.sorted(),

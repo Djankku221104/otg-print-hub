@@ -16,7 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.otgprinthub.domain.model.Driver
 import com.otgprinthub.domain.model.DriverSource
-import com.otgprinthub.util.Extensions.toFormattedDate
+import com.otgprinthub.util.toFormattedDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

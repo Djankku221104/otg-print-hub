@@ -76,16 +76,16 @@ class EscPosAdapter(override val driver: Driver) : PrintAdapter {
         val pH = ((qrData.size + 3) / 256).toByte()
 
         // Model
-        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x04.toByte(), 0x00.toByte(), 0x31.toByte(), 0x41.toByte(), 0x32.toByte(), 0x00.toByte()))
+        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x04.toByte(), 0x00.toByte(), 0x31.toByte(), 0x41.toByte(), 0x32.toByte(), 0x00.toByte()).toList())
         // Size
-        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x43.toByte(), moduleSize.toByte()))
+        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x43.toByte(), moduleSize.toByte()).toList())
         // Error correction
-        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x45.toByte(), 0x30.toByte()))
+        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x45.toByte(), 0x30.toByte()).toList())
         // Store data
-        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), pL, pH, 0x31.toByte(), 0x50.toByte(), 0x30.toByte()))
+        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), pL, pH, 0x31.toByte(), 0x50.toByte(), 0x30.toByte()).toList())
         result.addAll(qrData.toList())
         // Print
-        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x51.toByte(), 0x30.toByte()))
+        result.addAll(byteArrayOf(GS, 0x28.toByte(), 0x6B.toByte(), 0x03.toByte(), 0x00.toByte(), 0x31.toByte(), 0x51.toByte(), 0x30.toByte()).toList())
 
         return result.toByteArray()
     }
@@ -93,7 +93,7 @@ class EscPosAdapter(override val driver: Driver) : PrintAdapter {
     fun buildBarcode(data: String, barcodeType: Int = 0x04): ByteArray {
         val barcodeData = data.toByteArray(Charsets.US_ASCII)
         val result = mutableListOf<Byte>()
-        result.addAll(byteArrayOf(GS, 0x6B.toByte(), barcodeType.toByte()))
+        result.addAll(byteArrayOf(GS, 0x6B.toByte(), barcodeType.toByte()).toList())
         result.addAll(barcodeData.toList())
         result.add(NUL)
         return result.toByteArray()
@@ -162,7 +162,7 @@ class EscPosAdapter(override val driver: Driver) : PrintAdapter {
         val yL = (height % 256).toByte()
         val yH = (height / 256).toByte()
 
-        result.addAll(byteArrayOf(GS, 0x76.toByte(), 0x30.toByte(), 0x00.toByte(), xL, xH, yL, yH))
+        result.addAll(byteArrayOf(GS, 0x76.toByte(), 0x30.toByte(), 0x00.toByte(), xL, xH, yL, yH).toList())
 
         for (y in 0 until height) {
             for (byteIdx in 0 until bytesPerLine) {

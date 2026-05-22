@@ -1,7 +1,6 @@
 package com.otgprinthub.domain.usecase
 
 import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
 import com.otgprinthub.domain.model.Printer
 import com.otgprinthub.domain.model.PrinterStatus
 import com.otgprinthub.domain.repository.PrinterRepository
@@ -47,5 +46,5 @@ class DetectPrinterUseCase @Inject constructor(
     private fun getPrinterInterface(usbDevice: UsbDevice) =
         (0 until usbDevice.interfaceCount)
             .map { usbDevice.getInterface(it) }
-            .firstOrNull { it.interfaceClass == UsbManager.USB_CLASS_PRINTER }
+            .firstOrNull { it.interfaceClass == 7 } // USB printer class
 }

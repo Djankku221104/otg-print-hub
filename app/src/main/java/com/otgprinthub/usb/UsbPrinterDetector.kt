@@ -3,7 +3,6 @@ package com.otgprinthub.usb
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
-import android.hardware.usb.UsbManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,7 +22,7 @@ class UsbPrinterDetector @Inject constructor() {
     fun findPrinterInterface(device: UsbDevice): UsbInterface? {
         for (i in 0 until device.interfaceCount) {
             val iface = device.getInterface(i)
-            if (iface.interfaceClass == UsbManager.USB_CLASS_PRINTER) {
+            if (iface.interfaceClass == 7) { // USB printer class
                 return iface
             }
         }

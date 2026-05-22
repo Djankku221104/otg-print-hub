@@ -23,7 +23,7 @@ import com.otgprinthub.domain.model.PrinterStatus
 import com.otgprinthub.ui.components.PrintJobItem
 import com.otgprinthub.ui.components.PrinterStatusCard
 import com.otgprinthub.ui.navigation.Screen
-import com.otgprinthub.util.Extensions.toVidPidString
+import com.otgprinthub.util.toVidPidString
 import java.net.URLEncoder
 
 @OptIn(ExperimentalMaterial3Api::class)

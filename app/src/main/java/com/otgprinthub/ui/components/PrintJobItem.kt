@@ -14,7 +14,7 @@ import com.otgprinthub.domain.model.PrintJob
 import com.otgprinthub.ui.theme.ErrorRed
 import com.otgprinthub.ui.theme.SuccessGreen
 import com.otgprinthub.ui.theme.WarningOrange
-import com.otgprinthub.util.Extensions.toFormattedDate
+import com.otgprinthub.util.toFormattedDate
 
 @Composable
 fun PrintJobItem(
