@@ -105,6 +105,20 @@
       "notes": "Epson EcoTank L3150"
     },
     {
+      "vid": "04b8",
+      "pid": "0875",
+      "brand": "Epson",
+      "model": "L1455",
+      "protocol": "escp2",
+      "color": true,
+      "thermal": false,
+      "duplex": false,
+      "max_dpi": 5760,
+      "paper_sizes": ["A4", "Letter", "A3", "A3+", "Legal", "4x6"],
+      "init_commands": "1B40",
+      "notes": "Epson EcoTank L1455 wide-format InkTank inkjet"
+    },
+    {
       "vid": "04a9",
       "pid": "10dc",
       "brand": "Canon",

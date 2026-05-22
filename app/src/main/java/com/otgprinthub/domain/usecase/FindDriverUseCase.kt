@@ -69,7 +69,10 @@ class FindDriverUseCase @Inject constructor(
 
         // Layer 4: Generic fallback
         emit(DriverSearchState.TryingGenericDrivers)
-        val genericDriver = driverRepository.getGenericDrivers().firstOrNull()
+        val generics = driverRepository.getGenericDrivers()
+        val bestProtocol = inferGenericProtocol(printer.brandName)
+        val genericDriver = generics.firstOrNull { it.protocol == bestProtocol }
+            ?: generics.firstOrNull { it.protocol == PrintProtocol.RAW }
         if (genericDriver != null) {
             val fallback = genericDriver.copy(
                 vid = vid,
@@ -82,6 +85,22 @@ class FindDriverUseCase @Inject constructor(
             emit(DriverSearchState.DriverFound(fallback.copy(id = id)))
         } else {
             emit(DriverSearchState.DriverNotFound(vid, pid))
+        }
+    }
+
+    private fun inferGenericProtocol(brand: String): PrintProtocol {
+        return when {
+            brand.contains("Epson", ignoreCase = true) -> PrintProtocol.ESCP2
+            brand.contains("HP", ignoreCase = true) -> PrintProtocol.PCL5
+            brand.contains("Canon", ignoreCase = true) -> PrintProtocol.PCL5
+            brand.contains("Brother", ignoreCase = true) -> PrintProtocol.PCL5
+            brand.contains("Xerox", ignoreCase = true) ||
+            brand.contains("Samsung", ignoreCase = true) ||
+            brand.contains("Kyocera", ignoreCase = true) -> PrintProtocol.PCL6
+            brand.contains("Zebra", ignoreCase = true) ||
+            brand.contains("Star", ignoreCase = true) ||
+            brand.contains("Bixolon", ignoreCase = true) -> PrintProtocol.ESCPOS
+            else -> PrintProtocol.RAW
         }
     }
 }
