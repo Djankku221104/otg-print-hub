@@ -46,8 +46,11 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
     }
 
     override fun buildImageData(bitmap: Bitmap, settings: PrintSettings): ByteArray {
-        val dpi  = snapDpi(settings.quality.dpi)
-        val vh   = (720 / dpi).toByte()   // vertical/horizontal unit in 1/720 inch
+        val dpi    = snapDpi(settings.quality.dpi)
+        val vh     = (720 / dpi).toByte()    // ESC . v/h: 1/720 inch per unit
+        val unitD  = (3600 / dpi).toByte()   // ESC(U d: 1/3600 inch per unit → 1 unit = 1/dpi inch
+        // With unitD set this way, pageHeight in units == bitmap.height in pixels.
+
         val width        = bitmap.width
         val height       = bitmap.height
         val bytesPerLine = (width + 7) / 8
@@ -62,7 +65,15 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
         // ── 2. Enter ESC/P Raster mode ───────────────────────────────────────
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)
 
-        // ── 3. Raster lines ──────────────────────────────────────────────────
+        // ── 3. Set unit: 1 unit = 1/dpi inch  (ESC(U uses 1/3600 inch base) ──
+        result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)
+
+        // ── 4. Set page height (CRITICAL — without this, printer waits for a ──
+        //       full default page and ignores FF mid-stream)
+        result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)
+        result += int32LE(height)   // height in units == height in pixels (since unitD = 3600/dpi)
+
+        // ── 5. Raster lines ──────────────────────────────────────────────────
         val rowPixels = IntArray(width)
         for (y in 0 until height) {
             bitmap.getPixels(rowPixels, 0, width, 0, y, width, 1)
@@ -79,11 +90,16 @@ class EscP2Adapter(override val driver: Driver) : PrintAdapter {
             result += lineData
         }
 
-        // ── 4. Eject page ─────────────────────────────────────────────────────
+        // ── 6. Eject page ─────────────────────────────────────────────────────
         result += FF
 
         return result.toByteArray()
     }
+
+    private fun int32LE(v: Int) = byteArrayOf(
+        (v and 0xFF).toByte(), ((v shr 8) and 0xFF).toByte(),
+        ((v shr 16) and 0xFF).toByte(), ((v shr 24) and 0xFF).toByte()
+    )
 
     override fun buildPageBreak(): ByteArray = byteArrayOf(FF)
 

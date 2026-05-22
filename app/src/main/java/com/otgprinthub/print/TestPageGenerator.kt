@@ -63,39 +63,45 @@ object TestPageGenerator {
     }
 
     // ── Test 1: Raw Minimal ───────────────────────────────────────────────────────
-    // 100 dots wide, 30 all-black lines, 180 DPI (vh=4).
-    // Total ≈ 30 × (8 header + 13 data) = 630 bytes.
-    // If this doesn't print, the ESC/P Raster protocol is wrong or USB path is wrong.
+    // 200 dots wide, 30 all-black lines, 180 DPI.
+    // ESC(U + ESC(C tell printer exactly how tall the page is so FF is respected.
+    // Without ESC(C, printer waits for full A4 (2104 lines) and ignores FF → blinks.
     private fun rawMinimal(): ByteArray {
-        val width = 100
-        val bytesPerLine = (width + 7) / 8   // 13
+        val dpi   = 180
+        val lines = 30
+        val width = 200
+        val bytesPerLine = (width + 7) / 8
         val nL = (width and 0xFF).toByte()
-        val nH = 0.toByte()
-        val vh = 4.toByte()  // 180 DPI: 720/180 = 4
+        val nH = ((width shr 8) and 0xFF).toByte()
+        val vh    = (720 / dpi).toByte()    // 4  — ESC . unit: 1/720 inch
+        val unitD = (3600 / dpi).toByte()   // 20 — ESC(U unit: 1/180 inch per unit → 1 unit = 1 line
 
         val result = mutableListOf<Byte>()
-        result += byteArrayOf(ESC, 0x40)                                    // reset
-        result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)           // raster mode
+        result += byteArrayOf(ESC, 0x40)                               // reset
+        result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)      // raster mode
+        result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)     // set unit = 1/dpi inch
+        result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)            // page height:
+        result += int32LE(lines)                                        //   30 units = 30 lines
 
-        repeat(30) {
+        repeat(lines) {
             result += byteArrayOf(ESC, 0x2E, 0x00, vh, vh, 0x01, nL, nH)
-            result += ByteArray(bytesPerLine) { 0xFF.toByte() }             // all black
+            result += ByteArray(bytesPerLine) { 0xFF.toByte() }        // all black
         }
         result += FF
         return result.toByteArray()
     }
 
     // ── Test 2: Raw Stripes ───────────────────────────────────────────────────────
-    // A4 width at 180 DPI = 1488 dots (186 bytes/line).
-    // Pattern: 40 black, 20 white, 40 black, 20 white, 40 black → FF
-    // If Test 1 passes but this doesn't, the issue is transfer size.
+    // A4 width at 180 DPI = 1488 dots. 3 thick black bands + ESC(C for correct eject.
     private fun rawStripes(): ByteArray {
-        val dpi = 180
-        val vh = 4.toByte()
-        val width = mmToDots(210, dpi)   // A4 width in dots
+        val dpi   = 180
+        val vh    = (720 / dpi).toByte()
+        val unitD = (3600 / dpi).toByte()
+        val width = mmToDots(210, dpi)
         val bytesPerLine = (width + 7) / 8
         val nL = (width and 0xFF).toByte()
         val nH = ((width shr 8) and 0xFF).toByte()
+        val totalLines = 40 + 20 + 40 + 20 + 40  // 160
 
         val allBlack = ByteArray(bytesPerLine) { 0xFF.toByte() }
         val allWhite = ByteArray(bytesPerLine) { 0x00.toByte() }
@@ -103,6 +109,9 @@ object TestPageGenerator {
         val result = mutableListOf<Byte>()
         result += byteArrayOf(ESC, 0x40)
         result += byteArrayOf(ESC, 0x28, 0x47, 0x01, 0x00, 0x01)
+        result += byteArrayOf(ESC, 0x28, 0x55, 0x01, 0x00, unitD)
+        result += byteArrayOf(ESC, 0x28, 0x43, 0x04, 0x00)
+        result += int32LE(totalLines)
 
         fun addLine(lineData: ByteArray) {
             result += byteArrayOf(ESC, 0x2E, 0x00, vh, vh, 0x01, nL, nH)
@@ -288,6 +297,11 @@ object TestPageGenerator {
     // ── Helpers ───────────────────────────────────────────────────────────────────
 
     private fun mmToDots(mm: Int, dpi: Int): Int = (mm.toFloat() / 25.4f * dpi).toInt()
+
+    private fun int32LE(v: Int) = byteArrayOf(
+        (v and 0xFF).toByte(), ((v shr 8) and 0xFF).toByte(),
+        ((v shr 16) and 0xFF).toByte(), ((v shr 24) and 0xFF).toByte()
+    )
 
     private fun dummyDriver() = Driver(
         id = 0, vid = "04b8", pid = "1113",
