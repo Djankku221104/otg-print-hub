@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- USB OTG Host -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="true" />
+
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_DOCUMENTS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:name=".OtgPrintHubApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OTGPrintHub"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true">
+
+        <!-- Main Activity -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.OTGPrintHub">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- USB Device Attached Activity (auto-launch when printer connected) -->
+        <activity
+            android:name=".ui.UsbAttachActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.OTGPrintHub">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
+        </activity>
+
+        <!-- Print Foreground Service -->
+        <service
+            android:name=".print.PrintForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <!-- Driver Download WorkManager Worker -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge"
+            xmlns:tools="http://schemas.android.com/tools">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup" />
+        </provider>
+
+        <!-- USB BroadcastReceiver -->
+        <receiver
+            android:name=".usb.UsbBroadcastReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+                <action android:name="android.hardware.usb.action.USB_DEVICE_DETACHED" />
+                <action android:name="com.otgprinthub.USB_PERMISSION" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

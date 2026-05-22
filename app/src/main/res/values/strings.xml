@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OTG Print Hub</string>
+
+    <!-- Home Screen -->
+    <string name="home_title">OTG Print Hub</string>
+    <string name="home_no_printer">No Printer Connected</string>
+    <string name="home_connect_printer">Connect Printer</string>
+    <string name="home_printer_ready">Printer Ready</string>
+    <string name="home_print_pdf">Print PDF</string>
+    <string name="home_print_image">Print Image</string>
+    <string name="home_print_text">Print Text</string>
+    <string name="home_recent_jobs">Recent Print Jobs</string>
+    <string name="home_no_recent">No recent print jobs</string>
+
+    <!-- Detection -->
+    <string name="detection_title">Printer Detection</string>
+    <string name="detection_scanning">Scanning for printers...</string>
+    <string name="detection_no_devices">No USB devices found</string>
+    <string name="detection_connect_otg">Please connect a printer via OTG cable</string>
+    <string name="detection_checking_cache">Checking local cache...</string>
+    <string name="detection_searching_online">Searching online database...</string>
+    <string name="detection_checking_openprinting">Checking OpenPrinting.org...</string>
+    <string name="detection_trying_generic">Trying generic drivers...</string>
+    <string name="detection_driver_found">Driver found</string>
+    <string name="detection_unsupported">No driver found. Unsupported printer.</string>
+
+    <!-- Driver Manager -->
+    <string name="driver_manager_title">Driver Manager</string>
+    <string name="driver_update_all">Update All Drivers</string>
+    <string name="driver_clear_cache">Clear Driver Cache</string>
+    <string name="driver_import">Import Driver Profile</string>
+    <string name="driver_check_new">Check for New Drivers</string>
+
+    <!-- Print Queue -->
+    <string name="queue_title">Print Queue</string>
+    <string name="queue_active">Active</string>
+    <string name="queue_pending">Pending</string>
+    <string name="queue_completed">Completed</string>
+    <string name="queue_failed">Failed</string>
+    <string name="queue_empty">No print jobs</string>
+    <string name="queue_cancel">Cancel</string>
+    <string name="queue_retry">Retry</string>
+    <string name="queue_clear_history">Clear History</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_default_paper">Default Paper Size</string>
+    <string name="settings_default_quality">Default Print Quality</string>
+    <string name="settings_default_color">Default Color Mode</string>
+    <string name="settings_auto_connect">Auto-connect Last Printer</string>
+    <string name="settings_auto_download">Auto-download Drivers</string>
+    <string name="settings_driver_repo">Driver Repository URL</string>
+    <string name="settings_theme">App Theme</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_licenses">Open Source Licenses</string>
+
+    <!-- Print Preview -->
+    <string name="preview_title">Print Preview</string>
+    <string name="preview_print">Print</string>
+    <string name="preview_copies">Copies</string>
+    <string name="preview_paper_size">Paper Size</string>
+    <string name="preview_orientation">Orientation</string>
+    <string name="preview_color_mode">Color Mode</string>
+    <string name="preview_quality">Quality</string>
+    <string name="preview_fit_mode">Fit Mode</string>
+    <string name="preview_duplex">Duplex</string>
+    <string name="preview_page_range">Page Range</string>
+
+    <!-- Errors -->
+    <string name="error_otg_not_supported">Your device does not support USB OTG</string>
+    <string name="error_usb_permission_denied">USB permission required to connect printer</string>
+    <string name="error_no_printer_interface">Connected device is not a printer</string>
+    <string name="error_driver_not_found">No driver available. Try generic mode?</string>
+    <string name="error_download_failed">Download failed. Check internet connection.</string>
+    <string name="error_transfer_timeout">Printer not responding. Check connection.</string>
+    <string name="error_printer_disconnected">Printer disconnected! Job saved for retry.</string>
+
+    <!-- Status -->
+    <string name="status_queued">Queued</string>
+    <string name="status_preparing">Preparing</string>
+    <string name="status_printing">Printing</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_failed">Failed</string>
+    <string name="status_cancelled">Cancelled</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_queue">Queue</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Notifications -->
+    <string name="notif_channel_print">Print Jobs</string>
+    <string name="notif_channel_print_desc">Notifications for active print jobs</string>
+    <string name="notif_printing">Printing...</string>
+    <string name="notif_print_complete">Print Complete</string>
+    <string name="notif_print_failed">Print Failed</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,22L54,22A32,32 0,0 1,86 54L86,54A32,32 0,0 1,54 86L54,86A32,32 0,0 1,22 54L22,54A32,32 0,0 1,54 22z" />
+    <!-- Printer icon simplified -->
+    <rect android:fillColor="#1565C0" android:width="36" android:height="6" android:x="36" android:y="38" />
+    <rect android:fillColor="#1565C0" android:width="36" android:height="22" android:x="36" android:y="46" />
+    <rect android:fillColor="#FFFFFF" android:width="24" android:height="14" android:x="42" android:y="52" />
+    <rect android:fillColor="#1565C0" android:width="24" android:height="10" android:x="42" android:y="70" />
+    <rect android:fillColor="#1565C0" android:width="36" android:height="8" android:x="36" android:y="28" />
+</vector>

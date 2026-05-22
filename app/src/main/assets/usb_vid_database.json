@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2024-12-01",
+  "vendors": [
+    { "vid": "03f0", "name": "HP", "full_name": "Hewlett-Packard" },
+    { "vid": "04b8", "name": "Epson", "full_name": "Seiko Epson Corporation" },
+    { "vid": "04a9", "name": "Canon", "full_name": "Canon Inc." },
+    { "vid": "04f9", "name": "Brother", "full_name": "Brother Industries Ltd." },
+    { "vid": "0924", "name": "Xerox", "full_name": "Xerox Corporation" },
+    { "vid": "413c", "name": "Dell", "full_name": "Dell Inc." },
+    { "vid": "04e8", "name": "Samsung", "full_name": "Samsung Electronics" },
+    { "vid": "0482", "name": "Kyocera", "full_name": "Kyocera Corporation" },
+    { "vid": "0409", "name": "NEC", "full_name": "NEC Corporation" },
+    { "vid": "06bc", "name": "Oki", "full_name": "Oki Data Corporation" },
+    { "vid": "0519", "name": "Star", "full_name": "Star Micronics Co., Ltd." },
+    { "vid": "04da", "name": "Panasonic", "full_name": "Panasonic Corporation" },
+    { "vid": "067b", "name": "Prolific", "full_name": "Prolific Technology Inc." },
+    { "vid": "0483", "name": "STMicro", "full_name": "STMicroelectronics" },
+    { "vid": "154f", "name": "Bixolon", "full_name": "Bixolon Co., Ltd." },
+    { "vid": "0fe6", "name": "ICS", "full_name": "ICS Advent" },
+    { "vid": "1a86", "name": "QinHeng", "full_name": "QinHeng Electronics" },
+    { "vid": "2341", "name": "Arduino", "full_name": "Arduino SA" },
+    { "vid": "04dd", "name": "Sharp", "full_name": "Sharp Corporation" },
+    { "vid": "04c5", "name": "Fujitsu", "full_name": "Fujitsu Ltd." },
+    { "vid": "0738", "name": "Eltron", "full_name": "Eltron International" },
+    { "vid": "0a5f", "name": "Zebra", "full_name": "Zebra Technologies Corp." },
+    { "vid": "04b0", "name": "Nikon", "full_name": "Nikon Corporation" },
+    { "vid": "0451", "name": "TI", "full_name": "Texas Instruments Inc." }
+  ]
+}

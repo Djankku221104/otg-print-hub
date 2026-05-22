@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Filter for USB printer class devices (class 7) -->
+<resources>
+    <!-- USB Printer Class -->
+    <usb-device class="7" subclass="1" protocol="1" />
+    <usb-device class="7" subclass="1" protocol="2" />
+    <usb-device class="7" subclass="1" protocol="3" />
+
+    <!-- Common Printer VIDs (allow any PID) -->
+    <!-- HP -->
+    <usb-device vendor-id="1008" />
+    <!-- Epson -->
+    <usb-device vendor-id="1208" />
+    <!-- Canon -->
+    <usb-device vendor-id="1193" />
+    <!-- Brother -->
+    <usb-device vendor-id="1273" />
+    <!-- Xerox -->
+    <usb-device vendor-id="2340" />
+    <!-- Samsung -->
+    <usb-device vendor-id="1256" />
+    <!-- Kyocera -->
+    <usb-device vendor-id="1154" />
+    <!-- Zebra Technologies -->
+    <usb-device vendor-id="2655" />
+    <!-- Star Micronics -->
+    <usb-device vendor-id="1305" />
+    <!-- Bixolon -->
+    <usb-device vendor-id="26728" />
+</resources>
