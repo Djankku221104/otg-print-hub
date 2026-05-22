@@ -16,13 +16,13 @@ class PrintDocumentUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(
         fileUri: Uri,
+        fileType: FileType,
         printerVid: String,
         printerPid: String,
         printerName: String,
         settings: PrintSettings = PrintSettings()
     ): PrintJob {
         val fileName = getFileName(fileUri)
-        val fileType = getFileType(fileUri)
 
         val job = PrintJob(
             fileName = fileName,
@@ -49,14 +49,4 @@ class PrintDocumentUseCase @Inject constructor(
         }.getOrNull() ?: uri.lastPathSegment ?: "Unknown File"
     }
 
-    private fun getFileType(uri: Uri): FileType {
-        val ext = uri.lastPathSegment?.substringAfterLast('.', "") ?: ""
-        if (ext.isNotEmpty()) {
-            val fromExt = FileType.fromExtension(ext)
-            if (fromExt != FileType.UNKNOWN) return fromExt
-        }
-        val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: ""
-        if (mimeType.isNotEmpty()) return FileType.fromMimeType(mimeType)
-        return FileType.UNKNOWN
-    }
 }

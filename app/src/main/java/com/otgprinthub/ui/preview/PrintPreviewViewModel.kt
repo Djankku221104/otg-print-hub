@@ -60,6 +60,7 @@ class PrintPreviewViewModel @Inject constructor(
             try {
                 val job = printDocumentUseCase(
                     fileUri = fileUri,
+                    fileType = fileType,
                     printerVid = printer.vid,
                     printerPid = printer.pid,
                     printerName = printer.modelName,
