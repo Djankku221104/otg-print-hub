@@ -23,6 +23,7 @@ import com.otgprinthub.domain.model.FileType
 import com.otgprinthub.domain.model.JobStatus
 import com.otgprinthub.domain.model.PrinterStatus
 import com.otgprinthub.domain.usecase.FindDriverUseCase
+import com.otgprinthub.print.TestPageGenerator
 import com.otgprinthub.ui.components.PrintJobItem
 import com.otgprinthub.ui.components.PrinterStatusCard
 import com.otgprinthub.ui.navigation.Screen
@@ -44,6 +45,8 @@ fun HomeScreen(
     val printer by viewModel.connectedPrinter.collectAsStateWithLifecycle()
     val recentJobs by viewModel.recentJobs.collectAsStateWithLifecycle()
     val driverSearchState by viewModel.autoDriverSearchState.collectAsStateWithLifecycle()
+    val testPrintState by viewModel.testPrintState.collectAsStateWithLifecycle()
+    val testExpanded = remember { mutableStateOf(false) }
 
     fun persistAndNavigate(uri: Uri, fileType: FileType) {
         scope.launch {
@@ -196,6 +199,74 @@ fun HomeScreen(
                         enabled = printer != null,
                         onClick = { textLauncher.launch(arrayOf("text/*")) }
                     )
+                }
+            }
+
+            // ── Test Print Section ────────────────────────────────────────────────
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Test Print", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+                                Text("Diagnose printer issues", style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = {
+                                testExpanded.value = !testExpanded.value
+                                viewModel.resetTestPrintState()
+                            }) {
+                                Icon(
+                                    if (testExpanded.value) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null
+                                )
+                            }
+                        }
+
+                        if (testExpanded.value) {
+                            Spacer(Modifier.height(8.dp))
+                            Divider()
+                            Spacer(Modifier.height(8.dp))
+
+                            TestPageGenerator.TestType.entries.forEach { type ->
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.printTestPage(type)
+                                    },
+                                    enabled = printer != null && testPrintState !is HomeViewModel.TestPrintState.Sending,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(type.displayName, style = MaterialTheme.typography.labelMedium)
+                                        Text(type.description, style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(8.dp))
+
+                            when (val s = testPrintState) {
+                                is HomeViewModel.TestPrintState.Sending ->
+                                    Row(verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Text("Sending test data...", style = MaterialTheme.typography.bodySmall)
+                                    }
+                                is HomeViewModel.TestPrintState.Done ->
+                                    Text("Sent! Check printer.", style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary)
+                                is HomeViewModel.TestPrintState.Failed ->
+                                    Text("Failed: ${s.error}", style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error)
+                                else -> {}
+                            }
+                        }
+                    }
                 }
             }
 

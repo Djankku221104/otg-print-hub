@@ -9,6 +9,7 @@ import com.otgprinthub.domain.model.Printer
 import com.otgprinthub.domain.repository.PrintJobRepository
 import com.otgprinthub.domain.usecase.FindDriverUseCase
 import com.otgprinthub.driver.DriverManager
+import com.otgprinthub.print.TestPageGenerator
 import com.otgprinthub.ui.settings.dataStore
 import com.otgprinthub.usb.UsbPrinterManager
 import com.otgprinthub.util.Constants
@@ -43,6 +44,50 @@ class HomeViewModel @Inject constructor(
     val autoDriverSearchState: StateFlow<FindDriverUseCase.DriverSearchState?> = _autoDriverSearchState.asStateFlow()
 
     private var lastAutoSearchedVidPid: String? = null
+
+    sealed class TestPrintState {
+        data object Idle : TestPrintState()
+        data object Sending : TestPrintState()
+        data object Done : TestPrintState()
+        data class Failed(val error: String) : TestPrintState()
+    }
+
+    private val _testPrintState = MutableStateFlow<TestPrintState>(TestPrintState.Idle)
+    val testPrintState: StateFlow<TestPrintState> = _testPrintState.asStateFlow()
+
+    fun printTestPage(type: TestPageGenerator.TestType) {
+        val printer = usbPrinterManager.connectedPrinter.value ?: run {
+            _testPrintState.value = TestPrintState.Failed("No printer connected")
+            return
+        }
+        viewModelScope.launch {
+            _testPrintState.value = TestPrintState.Sending
+            val transport = usbPrinterManager.openConnection(printer) ?: run {
+                _testPrintState.value = TestPrintState.Failed("Cannot open USB connection")
+                return@launch
+            }
+            try {
+                val bytes = TestPageGenerator.generate(type)
+                var failed = false
+                transport.sendData(bytes).collect { result ->
+                    when (result) {
+                        is com.otgprinthub.usb.UsbPrinterTransport.TransferResult.Error -> {
+                            failed = true
+                            _testPrintState.value = TestPrintState.Failed(result.message)
+                        }
+                        is com.otgprinthub.usb.UsbPrinterTransport.TransferResult.Complete -> {
+                            if (!failed) _testPrintState.value = TestPrintState.Done
+                        }
+                        else -> {}
+                    }
+                }
+            } finally {
+                transport.close()
+            }
+        }
+    }
+
+    fun resetTestPrintState() { _testPrintState.value = TestPrintState.Idle }
 
     init {
         viewModelScope.launch {
