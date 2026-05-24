@@ -1,5 +1,6 @@
 package com.otgprinthub.ui.preview
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,13 +12,17 @@ import com.otgprinthub.domain.model.JobStatus
 import com.otgprinthub.domain.model.Orientation
 import com.otgprinthub.domain.model.PaperSize
 import com.otgprinthub.domain.model.PrintJob
+import com.otgprinthub.domain.model.PrintProtocol
 import com.otgprinthub.domain.model.PrintQuality
 import com.otgprinthub.domain.model.PrintSettings
 import com.otgprinthub.domain.repository.DriverRepository
 import com.otgprinthub.domain.usecase.PrintDocumentUseCase
 import com.otgprinthub.print.PrintEngine
+import com.otgprinthub.printer.PrintHelper
 import com.otgprinthub.usb.UsbPrinterManager
+import com.otgprinthub.usb.UsbPrinterTransport
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +31,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PrintPreviewViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val usbPrinterManager: UsbPrinterManager,
     private val printDocumentUseCase: PrintDocumentUseCase,
     private val driverRepository: DriverRepository,
@@ -80,29 +86,44 @@ class PrintPreviewViewModel @Inject constructor(
                         return@launch
                     }
 
-                printEngine.print(job, driver, transport).collect { progress ->
-                    when (progress) {
-                        is PrintEngine.PrintProgress.Preparing ->
-                            _printState.value = PrintState.Printing(5, progress.message)
-                        is PrintEngine.PrintProgress.Rendering ->
-                            _printState.value = PrintState.Printing(
-                                (progress.page.toFloat() / progress.total * 50).toInt(), "Rendering page ${progress.page}/${progress.total}"
-                            )
-                        is PrintEngine.PrintProgress.Sending ->
-                            _printState.value = PrintState.Printing(
-                                (50 + progress.bytesSent.toFloat() / progress.totalBytes * 50).toInt(),
-                                "Sending ${progress.bytesSent / 1024}/${progress.totalBytes / 1024} KB"
-                            )
-                        is PrintEngine.PrintProgress.Complete ->
-                            _printState.value = PrintState.Done
-                        is PrintEngine.PrintProgress.Failed ->
-                            _printState.value = PrintState.Failed(progress.error)
+                if (driver.protocol == PrintProtocol.ESCP2) {
+                    printViaEscpr(fileUri, transport)
+                } else {
+                    printEngine.print(job, driver, transport).collect { progress ->
+                        when (progress) {
+                            is PrintEngine.PrintProgress.Preparing ->
+                                _printState.value = PrintState.Printing(5, progress.message)
+                            is PrintEngine.PrintProgress.Rendering ->
+                                _printState.value = PrintState.Printing(
+                                    (progress.page.toFloat() / progress.total * 50).toInt(), "Rendering page ${progress.page}/${progress.total}"
+                                )
+                            is PrintEngine.PrintProgress.Sending ->
+                                _printState.value = PrintState.Printing(
+                                    (50 + progress.bytesSent.toFloat() / progress.totalBytes * 50).toInt(),
+                                    "Sending ${progress.bytesSent / 1024}/${progress.totalBytes / 1024} KB"
+                                )
+                            is PrintEngine.PrintProgress.Complete ->
+                                _printState.value = PrintState.Done
+                            is PrintEngine.PrintProgress.Failed ->
+                                _printState.value = PrintState.Failed(progress.error)
+                        }
                     }
                 }
             } catch (e: Exception) {
                 _printState.value = PrintState.Failed(e.message ?: "Unknown error")
             }
         }
+    }
+
+    private suspend fun printViaEscpr(fileUri: Uri, transport: UsbPrinterTransport) {
+        val helper = PrintHelper(context)
+        _printState.value = PrintState.Printing(5, "Rendering document…")
+        val result = helper.printUri(fileUri, transport) { msg ->
+            _printState.value = PrintState.Printing(50, msg)
+        }
+        _printState.value = if (result.isSuccess) PrintState.Done
+                            else PrintState.Failed(result.exceptionOrNull()?.message ?: "Print failed")
+        transport.close()
     }
 
     fun resetPrintState() { _printState.value = PrintState.Idle }
