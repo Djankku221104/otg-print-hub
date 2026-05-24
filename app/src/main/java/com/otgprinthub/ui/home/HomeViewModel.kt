@@ -64,7 +64,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _testPrintState.value = TestPrintState.Sending
             AppLogger.separator("TestPage:${type.name}")
-            AppLogger.i("HomeVM", "Printer: ${printer.name} VID=${printer.vid} PID=${printer.pid}")
+            AppLogger.i("HomeVM", "Printer: ${printer.modelName} VID=${printer.vid} PID=${printer.pid}")
             val transport = usbPrinterManager.openConnection(printer) ?: run {
                 AppLogger.e("HomeVM", "Cannot open USB connection")
                 _testPrintState.value = TestPrintState.Failed("Cannot open USB connection")
