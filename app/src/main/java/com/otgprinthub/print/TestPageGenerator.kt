@@ -5,7 +5,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.util.Log
 import com.otgprinthub.print.adapters.EscP2Adapter
+import com.otgprinthub.printer.EscprProtocol
+import com.otgprinthub.printer.ImageToRasterConverter
 import com.otgprinthub.domain.model.ColorMode
 import com.otgprinthub.domain.model.Driver
 import com.otgprinthub.domain.model.PrintProtocol
@@ -49,10 +52,16 @@ object TestPageGenerator {
         BITMAP_INFO(
             "5. Bitmap Info Page",
             "Full info: date, lines, boxes."
+        ),
+        ESCPR_BLOCK(
+            "6. ESCPR Block ★",
+            "Correct ESCPR protocol: 100 solid-black lines via dsnd. USE THIS FIRST."
         )
     }
 
     // ── Public API ────────────────────────────────────────────────────────────────
+
+    private const val TAG = "TestPageGen"
 
     fun generate(type: TestType): ByteArray = when (type) {
         TestType.RAW_MINIMAL   -> rawMinimal()
@@ -60,6 +69,7 @@ object TestPageGenerator {
         TestType.TEXT_MODE     -> textMode()
         TestType.BITMAP_SIMPLE -> bitmapSimple()
         TestType.BITMAP_INFO   -> bitmapInfo()
+        TestType.ESCPR_BLOCK   -> escprBlock()
     }
 
     // ── Test 1: Raw Minimal ───────────────────────────────────────────────────────
@@ -294,6 +304,51 @@ object TestPageGenerator {
         val data = adapter.buildImageData(bitmap, settings)
         bitmap.recycle()
         return data
+    }
+
+    // ── Test 6: ESCPR Block ───────────────────────────────────────────────────────
+    // Correct ESCPR protocol: exitPacketMode → REMOTE1 → ESCPR mode → dsnd per-line
+    // Uses EscprProtocol + ImageToRasterConverter. THIS IS THE CORRECT PROTOCOL FOR L1455.
+    private fun escprBlock(): ByteArray {
+        val dpi       = 360
+        val widthPx   = (210.0 / 25.4 * dpi).toInt()  // 2976
+        val testLines = 100
+
+        Log.i(TAG, "escprBlock: ${widthPx}px wide, $testLines lines, ESCPR CM.MONO")
+
+        val rows = ImageToRasterConverter.solidBlackInkRows(widthPx, testLines)
+        val chunks = mutableListOf<ByteArray>()
+
+        chunks += EscprProtocol.exitPacketMode()
+        chunks += EscprProtocol.printerReset()
+        chunks += EscprProtocol.enterRemote1()
+        chunks += EscprProtocol.timestamp()
+        chunks += EscprProtocol.jobStart()
+        chunks += EscprProtocol.paperPath()
+        chunks += EscprProtocol.exitRemote1()
+
+        chunks += EscprProtocol.enterEscprMode()
+        chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
+        chunks += EscprProtocol.setJob(widthPx, testLines, dpi)
+
+        chunks += EscprProtocol.startPage()
+        chunks += EscprProtocol.pageNumber(1)
+        for (y in 0 until testLines) chunks += EscprProtocol.sendLine(y, rows[y])
+        chunks += EscprProtocol.endPage(0)
+
+        chunks += EscprProtocol.endJob()
+        chunks += EscprProtocol.printerReset()
+        chunks += EscprProtocol.enterRemote1()
+        chunks += EscprProtocol.loadDefaults()
+        chunks += EscprProtocol.jobEnd()
+        chunks += EscprProtocol.exitRemote1()
+
+        val totalSize = chunks.sumOf { it.size }
+        Log.i(TAG, "escprBlock: $totalSize bytes total")
+        val result = ByteArray(totalSize)
+        var offset = 0
+        for (chunk in chunks) { chunk.copyInto(result, offset); offset += chunk.size }
+        return result
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────
