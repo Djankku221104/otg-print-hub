@@ -12,6 +12,7 @@ import com.otgprinthub.driver.DriverManager
 import com.otgprinthub.print.TestPageGenerator
 import com.otgprinthub.ui.settings.dataStore
 import com.otgprinthub.usb.UsbPrinterManager
+import com.otgprinthub.util.AppLogger
 import com.otgprinthub.util.Constants
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -62,25 +63,35 @@ class HomeViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _testPrintState.value = TestPrintState.Sending
+            AppLogger.separator("TestPage:${type.name}")
+            AppLogger.i("HomeVM", "Printer: ${printer.name} VID=${printer.vid} PID=${printer.pid}")
             val transport = usbPrinterManager.openConnection(printer) ?: run {
+                AppLogger.e("HomeVM", "Cannot open USB connection")
                 _testPrintState.value = TestPrintState.Failed("Cannot open USB connection")
                 return@launch
             }
             try {
                 val bytes = TestPageGenerator.generate(type)
+                AppLogger.i("HomeVM", "Test bytes: ${bytes.size} (${bytes.size / 1024} KB)")
+                AppLogger.i("HomeVM", "Header: " + bytes.take(16).joinToString(" ") { "%02X".format(it.toInt() and 0xFF) })
                 var failed = false
                 transport.sendData(bytes).collect { result ->
                     when (result) {
                         is com.otgprinthub.usb.UsbPrinterTransport.TransferResult.Error -> {
                             failed = true
+                            AppLogger.e("HomeVM", "USB Error: ${result.message}")
                             _testPrintState.value = TestPrintState.Failed(result.message)
                         }
                         is com.otgprinthub.usb.UsbPrinterTransport.TransferResult.Complete -> {
+                            AppLogger.i("HomeVM", "USB send complete — check printer!")
                             if (!failed) _testPrintState.value = TestPrintState.Done
                         }
                         else -> {}
                     }
                 }
+            } catch (e: Exception) {
+                AppLogger.e("HomeVM", "Exception: ${e.message}")
+                _testPrintState.value = TestPrintState.Failed(e.message ?: "Unknown error")
             } finally {
                 transport.close()
             }

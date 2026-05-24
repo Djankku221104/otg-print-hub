@@ -4,6 +4,7 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbEndpoint
 import android.hardware.usb.UsbInterface
 import android.util.Log
+import com.otgprinthub.util.AppLogger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
@@ -48,6 +49,7 @@ class UsbPrinterTransport(
         val claimed = connection.claimInterface(usbInterface, true)
         if (!claimed) {
             Log.e(TAG, "Cannot claim interface ${usbInterface.id}")
+            AppLogger.e(TAG, "Cannot claim USB interface ${usbInterface.id}")
             return false
         }
 
@@ -65,6 +67,9 @@ class UsbPrinterTransport(
         if (idLen > 2) {
             val id = String(idBuf, 2, idLen - 2, Charsets.US_ASCII)
             Log.i(TAG, "Printer device ID: $id")
+            AppLogger.i(TAG, "DeviceID: $id")
+        } else {
+            AppLogger.w(TAG, "GET_DEVICE_ID returned $idLen bytes (expected >2)")
         }
 
         // 2. SOFT_RESET — clears printer data path; essential after a failed job
@@ -77,6 +82,7 @@ class UsbPrinterTransport(
             TIMEOUT_MS
         )
         Log.d(TAG, "SOFT_RESET result: $resetResult")
+        AppLogger.i(TAG, "SOFT_RESET result: $resetResult")
 
         // Give the printer 200 ms to complete its internal reset
         Thread.sleep(200)
@@ -88,7 +94,10 @@ class UsbPrinterTransport(
             0, usbInterface.id,
             statusBuf, 1, TIMEOUT_MS
         )
-        Log.d(TAG, "Port status: 0x${statusBuf[0].toInt().and(0xFF).toString(16)}")
+        val portStatus = statusBuf[0].toInt() and 0xFF
+        Log.d(TAG, "Port status: 0x${portStatus.toString(16)}")
+        AppLogger.i(TAG, "Port status: 0x${portStatus.toString(16)} " +
+            "(paperEmpty=${portStatus and 0x20 != 0}, select=${portStatus and 0x10 != 0}, notError=${portStatus and 0x08 != 0})")
 
         return true
     }
@@ -98,6 +107,7 @@ class UsbPrinterTransport(
         var bytesSent = 0L
 
         // Claim interface + initialise printer (SOFT_RESET + GET_DEVICE_ID)
+        AppLogger.i(TAG, "sendData: ${totalBytes} bytes, chunk=${CHUNK_SIZE}")
         if (!initPrinter()) {
             emit(TransferResult.Error("Failed to claim USB interface"))
             return@flow
@@ -116,21 +126,28 @@ class UsbPrinterTransport(
                     if (transferred < 0) {
                         retries++
                         Log.w(TAG, "Transfer failed, retry $retries/$MAX_RETRIES")
+                        AppLogger.w(TAG, "bulkTransfer fail retry $retries at offset $offset")
                     }
                 }
 
                 if (transferred < 0) {
+                    AppLogger.e(TAG, "Transfer FAILED after $MAX_RETRIES retries at offset $offset")
                     emit(TransferResult.Error("Transfer failed after $MAX_RETRIES retries at offset $offset"))
                     return@flow
                 }
 
                 bytesSent += transferred
                 offset += chunkSize
+                if (bytesSent % (CHUNK_SIZE * 8) < CHUNK_SIZE) {
+                    AppLogger.d(TAG, "USB: ${bytesSent}/$totalBytes bytes sent")
+                }
                 emit(TransferResult.Progress(bytesSent, totalBytes))
             }
+            AppLogger.i(TAG, "USB sendData COMPLETE: $totalBytes bytes")
             emit(TransferResult.Complete)
         } catch (e: Exception) {
             Log.e(TAG, "USB transfer exception", e)
+            AppLogger.e(TAG, "USB exception: ${e.message}")
             emit(TransferResult.Error("Transfer exception: ${e.message}", e))
         } finally {
             connection.releaseInterface(usbInterface)
