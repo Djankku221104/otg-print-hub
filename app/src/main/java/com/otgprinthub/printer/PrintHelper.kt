@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import com.otgprinthub.usb.UsbPrinterTransport
+import com.otgprinthub.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,12 +75,14 @@ class PrintHelper(private val context: Context) {
         withContext(Dispatchers.IO) {
             try {
                 val testLines = 100
-                Log.i(TAG, "═══ printTestBlock START ═══ ${widthPx}px x $testLines lines")
+                AppLogger.separator("printTestBlock")
+                AppLogger.i(TAG, "${widthPx}px x $testLines lines, ESCPR CM.MONO")
                 val rows = ImageToRasterConverter.solidBlackInkRows(widthPx, testLines)
                 val jobBytes = buildEscprJob(rows, widthPx, testLines)
-                Log.i(TAG, "Test job: ${jobBytes.size} bytes")
+                AppLogger.i(TAG, "Job size: ${jobBytes.size} bytes")
+                AppLogger.i(TAG, "Header hex: " + jobBytes.take(32).joinToString(" ") { "%02X".format(it.toInt() and 0xFF) })
                 sendJob(jobBytes, transport)
-                Log.i(TAG, "═══ printTestBlock DONE ═══")
+                AppLogger.i(TAG, "printTestBlock DONE - check printer!")
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "printTestBlock FAILED", e)
@@ -127,6 +130,7 @@ class PrintHelper(private val context: Context) {
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
         chunks += EscprProtocol.setJob(w, h, dpi)
+        AppLogger.i(TAG, "[4] ESCPR mode: setq(PLAIN,NORMAL,MONO) + setj(${w}x${h}@${dpi}DPI)")
         Log.d(TAG, "[4] ESCPR mode, setq+setj for ${w}x${h}px")
 
         chunks += EscprProtocol.startPage()
@@ -247,20 +251,25 @@ class PrintHelper(private val context: Context) {
         onProgress: (String) -> Unit = {}
     ) {
         val total = data.size
+        AppLogger.i(TAG, "USB send: $total bytes")
         Log.i(TAG, "sendJob: sending $total bytes via USB")
         transport.sendData(data).collect { result ->
             when (result) {
                 is UsbPrinterTransport.TransferResult.Progress -> {
                     val pct = (result.bytesSent * 100 / total).toInt()
+                    if (pct % 20 == 0) AppLogger.d(TAG, "USB: ${result.bytesSent}/$total ($pct%)")
                     Log.d(TAG, "USB progress: ${result.bytesSent}/$total ($pct%)")
                     onProgress("Sent ${result.bytesSent / 1024}/${total / 1024} KB ($pct%)")
                 }
                 is UsbPrinterTransport.TransferResult.Error -> {
+                    AppLogger.e(TAG, "USB ERROR: ${result.message}")
                     Log.e(TAG, "USB transfer error: ${result.message}")
                     throw Exception("USB error: ${result.message}")
                 }
-                is UsbPrinterTransport.TransferResult.Complete ->
+                is UsbPrinterTransport.TransferResult.Complete -> {
+                    AppLogger.i(TAG, "USB transfer COMPLETE")
                     Log.i(TAG, "USB transfer complete")
+                }
                 else -> {}
             }
         }

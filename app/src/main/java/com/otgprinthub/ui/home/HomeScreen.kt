@@ -8,14 +8,23 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -27,6 +36,7 @@ import com.otgprinthub.print.TestPageGenerator
 import com.otgprinthub.ui.components.PrintJobItem
 import com.otgprinthub.ui.components.PrinterStatusCard
 import com.otgprinthub.ui.navigation.Screen
+import com.otgprinthub.util.AppLogger
 import com.otgprinthub.util.toVidPidString
 import java.io.File
 import java.net.URLEncoder
@@ -47,6 +57,8 @@ fun HomeScreen(
     val driverSearchState by viewModel.autoDriverSearchState.collectAsStateWithLifecycle()
     val testPrintState by viewModel.testPrintState.collectAsStateWithLifecycle()
     val testExpanded = remember { mutableStateOf(false) }
+    val showLogsDialog = remember { mutableStateOf(false) }
+    var logText by remember { mutableStateOf("") }
 
     fun persistAndNavigate(uri: Uri, fileType: FileType) {
         scope.launch {
@@ -94,6 +106,57 @@ fun HomeScreen(
     val textLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { persistAndNavigate(it, FileType.TEXT) } }
+
+    // ── Log viewer dialog ─────────────────────────────────────────────────────
+    if (showLogsDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showLogsDialog.value = false },
+            title = { Text("Debug Logs", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Last captured ESCPR/USB logs:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            text = logText.ifBlank { "(No logs yet — run a test print first)" },
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = androidx.compose.ui.unit.TextUnit(9f, androidx.compose.ui.unit.TextUnitType.Sp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "OTG Print Hub Debug Logs")
+                        putExtra(Intent.EXTRA_TEXT, logText)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Share logs"))
+                }) { Text("Share") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { AppLogger.clear(); logText = ""; showLogsDialog.value = false }) {
+                        Text("Clear")
+                    }
+                    TextButton(onClick = { showLogsDialog.value = false }) {
+                        Text("Close")
+                    }
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -264,6 +327,20 @@ fun HomeScreen(
                                     Text("Failed: ${s.error}", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error)
                                 else -> {}
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    logText = AppLogger.getAll()
+                                    showLogsDialog.value = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(Icons.Default.Article, contentDescription = null,
+                                    modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("View / Share Debug Logs", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }

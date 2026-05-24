@@ -310,13 +310,16 @@ object TestPageGenerator {
     // Correct ESCPR protocol: exitPacketMode → REMOTE1 → ESCPR mode → dsnd per-line
     // Uses EscprProtocol + ImageToRasterConverter. THIS IS THE CORRECT PROTOCOL FOR L1455.
     private fun escprBlock(): ByteArray {
-        val dpi       = 360
-        val widthPx   = (210.0 / 25.4 * dpi).toInt()  // 2976
-        val testLines = 100
+        val dpi        = 360
+        val widthPx    = (210.0 / 25.4 * dpi).toInt()   // 2976
+        val heightPx   = (297.0 / 25.4 * dpi).toInt()   // 4209 — full A4, no size warning
+        val blackLines = 100                              // top 100 lines solid black (~7mm stripe)
 
-        Log.i(TAG, "escprBlock: ${widthPx}px wide, $testLines lines, ESCPR CM.MONO")
+        Log.i(TAG, "escprBlock: ${widthPx}x${heightPx}px, $blackLines black lines, ESCPR CM.MONO")
 
-        val rows = ImageToRasterConverter.solidBlackInkRows(widthPx, testLines)
+        val blackRow = ByteArray(widthPx) { 0x00 }  // 0x00 = dark = full ink = black
+        val whiteRow = ByteArray(widthPx) { 0xFF.toByte() }  // 0xFF = bright = no ink = white
+
         val chunks = mutableListOf<ByteArray>()
 
         chunks += EscprProtocol.exitPacketMode()
@@ -329,11 +332,13 @@ object TestPageGenerator {
 
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
-        chunks += EscprProtocol.setJob(widthPx, testLines, dpi)
+        chunks += EscprProtocol.setJob(widthPx, heightPx, dpi)  // full A4 — no size warning
 
         chunks += EscprProtocol.startPage()
         chunks += EscprProtocol.pageNumber(1)
-        for (y in 0 until testLines) chunks += EscprProtocol.sendLine(y, rows[y])
+        // First 100 lines: solid black stripe
+        for (y in 0 until blackLines) chunks += EscprProtocol.sendLine(y, blackRow)
+        // Skip remaining lines (send only endPage — printer will fill rest as white)
         chunks += EscprProtocol.endPage(0)
 
         chunks += EscprProtocol.endJob()

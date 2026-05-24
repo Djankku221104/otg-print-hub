@@ -39,8 +39,11 @@ object ImageToRasterConverter {
             val row = ByteArray(width)
             for (x in 0 until width) {
                 val p   = pixels[x]
+                // CM.MONOCHROME: send raw luminance (same as RGB lightness)
+                // 0x00 = dark pixel = printer applies full ink = black output
+                // 0xFF = bright pixel = printer applies no ink = white output
                 val lum = (Color.red(p) * 299 + Color.green(p) * 587 + Color.blue(p) * 114) / 1000
-                row[x]  = (255 - lum).toByte()
+                row[x]  = lum.toByte()
             }
             rows.add(row)
         }
@@ -48,11 +51,12 @@ object ImageToRasterConverter {
     }
 
     /**
-     * Solid black test rows for CM.MONOCHROME (0xFF = full ink = black).
+     * Solid black test rows for CM.MONOCHROME.
+     * 0x00 = dark = full ink = black output.
      */
     fun solidBlackInkRows(widthPx: Int, lines: Int): List<ByteArray> {
         Log.d(TAG, "solidBlackInkRows: ${widthPx}x${lines}")
-        val row = ByteArray(widthPx) { 0xFF.toByte() }
+        val row = ByteArray(widthPx) { 0x00.toByte() }  // 0x00 = black (not 0xFF!)
         return List(lines) { row.copyOf() }
     }
 
