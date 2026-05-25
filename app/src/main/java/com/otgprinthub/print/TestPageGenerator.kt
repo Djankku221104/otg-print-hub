@@ -174,12 +174,9 @@ object TestPageGenerator {
         for (y in 0 until printLines) chunks += EscprProtocol.sendLine(y, rowProvider(y))
         chunks += EscprProtocol.endPage(0)
 
-        // JE (jobEnd) causes a blank page eject — skip it
+        // Minimal cleanup: endJob exits ESCPR mode.
+        // printerReset/REMOTE1 cause a blank page eject after content — skip them.
         chunks += EscprProtocol.endJob()
-        chunks += EscprProtocol.printerReset()
-        chunks += EscprProtocol.enterRemote1()
-        chunks += EscprProtocol.loadDefaults()
-        chunks += EscprProtocol.exitRemote1()
 
         val totalSize = chunks.sumOf { it.size }
         Log.i(TAG, "buildEscprJob: $printLines lines → $totalSize bytes (${totalSize / 1024} KB)")

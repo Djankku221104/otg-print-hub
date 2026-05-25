@@ -60,7 +60,7 @@ class PrintHelper(private val context: Context) {
 
             AppLogger.separator("printUri")
             AppLogger.i(TAG, "Settings: size=${settings.paperSize.name} orient=${settings.orientation.name} color=${settings.colorMode.name} quality=${settings.quality.name} fit=${settings.fitMode.name} copies=$copies")
-            AppLogger.i(TAG, "Computed: paperW=${paperW}px paperH=${paperH}px @${dpi}DPI cm=${if (isColor) 0 else 1}")
+            AppLogger.i(TAG, "Computed: paperW=${paperW}px paperH=${paperH}px @${dpi}DPI cm=0(always)")
             Log.i(TAG, "═══ printUri START ═══ ${paperW}x${paperH}px @${dpi}DPI color=$isColor copies=$copies")
 
             onProgress("Rendering document…")
@@ -70,10 +70,11 @@ class PrintHelper(private val context: Context) {
             Log.i(TAG, "Rendered bitmap: ${bitmap.width}x${bitmap.height}px")
             onProgress("Converting to ink data…")
 
-            val rows = if (isColor)
-                ImageToRasterConverter.toColorInkRows(bitmap)
-            else
-                ImageToRasterConverter.toInkRows(bitmap)
+            // Always use cm=0 (COLOR, 3 bytes/pixel RGB).
+            // For GRAYSCALE/B&W: renderToBitmap already calls toGrayscale() so each pixel
+            // has R=G=B, giving correct grayscale output. cm=1 (MONO) fills only ~1/3 of the
+            // page width on L1455 — do NOT use it.
+            val rows = ImageToRasterConverter.toColorInkRows(bitmap)
             bitmap.recycle()
             AppLogger.i(TAG, "Ink rows: ${rows.size} rows x ${rows.firstOrNull()?.size ?: 0} bytes/row")
 
@@ -104,7 +105,7 @@ class PrintHelper(private val context: Context) {
         settings: PrintSettings = PrintSettings()
     ): ByteArray {
         val isColor = settings.colorMode == ColorMode.COLOR
-        val cm      = if (isColor) 0 else 1
+        val cm      = 0  // always COLOR encoding — cm=1 (MONO) fills only ~1/3 of page on L1455
         val mqid    = when (settings.quality) {
             PrintQuality.DRAFT  -> 0
             PrintQuality.NORMAL -> 1
@@ -125,7 +126,7 @@ class PrintHelper(private val context: Context) {
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = mqid, cm = cm)
         chunks += EscprProtocol.setJob(w, h, dpi)
-        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR(cm=0)" else "MONO(cm=1)"} | setj: ${w}x${h}@${dpi}DPI")
+        AppLogger.i(TAG, "setq: mqid=$mqid cm=COLOR(cm=0,${if (isColor) "rgb" else "gray"}) | setj: ${w}x${h}@${dpi}DPI")
 
         // ── Pages (copies) — startPage per copy matches python-epson sequence ─
         for (copy in 0 until copies) {
@@ -140,12 +141,9 @@ class PrintHelper(private val context: Context) {
             Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
 
-        // ── Cleanup: JE (jobEnd) causes a blank page eject — skip it entirely ──
+        // ── Cleanup: endJob exits ESCPR mode. No printerReset/REMOTE1 — they
+        //    cause the printer to eject a blank page after the content page. ──
         chunks += EscprProtocol.endJob()
-        chunks += EscprProtocol.printerReset()
-        chunks += EscprProtocol.enterRemote1()
-        chunks += EscprProtocol.loadDefaults()
-        chunks += EscprProtocol.exitRemote1()
 
         val totalSize = chunks.sumOf { it.size }
         AppLogger.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")
