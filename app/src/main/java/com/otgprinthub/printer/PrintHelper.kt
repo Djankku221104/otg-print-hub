@@ -59,7 +59,8 @@ class PrintHelper(private val context: Context) {
             val copies  = settings.copies.coerceIn(1, 99)
 
             AppLogger.separator("printUri")
-            AppLogger.i(TAG, "Paper: ${paperW}x${paperH}px @${dpi}DPI | ${settings.colorMode} | ${settings.quality} | x$copies")
+            AppLogger.i(TAG, "Settings: size=${settings.paperSize.name} orient=${settings.orientation.name} color=${settings.colorMode.name} quality=${settings.quality.name} fit=${settings.fitMode.name} copies=$copies")
+            AppLogger.i(TAG, "Computed: paperW=${paperW}px paperH=${paperH}px @${dpi}DPI cm=${if (isColor) 0 else 1}")
             Log.i(TAG, "═══ printUri START ═══ ${paperW}x${paperH}px @${dpi}DPI color=$isColor copies=$copies")
 
             onProgress("Rendering document…")
@@ -139,12 +140,11 @@ class PrintHelper(private val context: Context) {
             Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
 
-        // ── Cleanup — printerReset matches TestPageGenerator (confirmed working)
+        // ── Cleanup: JE (jobEnd) causes a blank page eject — skip it entirely ──
         chunks += EscprProtocol.endJob()
         chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.loadDefaults()
-        chunks += EscprProtocol.jobEnd()
         chunks += EscprProtocol.exitRemote1()
 
         val totalSize = chunks.sumOf { it.size }

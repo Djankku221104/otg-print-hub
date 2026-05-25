@@ -174,11 +174,11 @@ object TestPageGenerator {
         for (y in 0 until printLines) chunks += EscprProtocol.sendLine(y, rowProvider(y))
         chunks += EscprProtocol.endPage(0)
 
+        // JE (jobEnd) causes a blank page eject — skip it
         chunks += EscprProtocol.endJob()
         chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.loadDefaults()
-        chunks += EscprProtocol.jobEnd()
         chunks += EscprProtocol.exitRemote1()
 
         val totalSize = chunks.sumOf { it.size }
