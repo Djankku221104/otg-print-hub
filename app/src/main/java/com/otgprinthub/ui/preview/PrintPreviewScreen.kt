@@ -2,6 +2,8 @@ package com.otgprinthub.ui.preview
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,6 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -36,6 +41,8 @@ fun PrintPreviewScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val printer by viewModel.connectedPrinter.collectAsStateWithLifecycle()
     val printState by viewModel.printState.collectAsStateWithLifecycle()
+    val previewBitmap by viewModel.previewBitmap.collectAsStateWithLifecycle()
+    val previewLoading by viewModel.previewLoading.collectAsStateWithLifecycle()
 
     val settingsExpanded = remember { mutableStateOf(false) }
 
@@ -43,6 +50,12 @@ fun PrintPreviewScreen(
         if (printState is PrintPreviewViewModel.PrintState.Done) {
             navController.popBackStack()
         }
+    }
+
+    // Generate preview on load and whenever layout-affecting settings change
+    LaunchedEffect(uri) { viewModel.generatePreview(uri) }
+    LaunchedEffect(settings.paperSize, settings.orientation, settings.colorMode, settings.fitMode) {
+        viewModel.generatePreview(uri)
     }
 
     Scaffold(
@@ -73,6 +86,38 @@ fun PrintPreviewScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Preview Card
+            val safeH = settings.paperSize.heightMm.takeIf { it < 10_000f } ?: 297f
+            val paperAspectRatio = if (settings.orientation == Orientation.LANDSCAPE)
+                (safeH / settings.paperSize.widthMm).coerceIn(0.3f, 3f)
+            else
+                (settings.paperSize.widthMm / safeH).coerceIn(0.3f, 3f)
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(paperAspectRatio)
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val bmp = previewBitmap
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "Print preview",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else if (previewLoading) {
+                        CircularProgressIndicator()
+                    } else {
+                        Icon(Icons.Default.Image, contentDescription = null,
+                            modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            }
+
             // File Info Card
             Card {
                 Row(
@@ -144,20 +189,6 @@ fun PrintPreviewScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Divider()
 
-                            // Copies
-                            SettingRow("Copies") {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    IconButton(
-                                        onClick = { if (settings.copies > 1) viewModel.updateSettings(settings.copy(copies = settings.copies - 1)) },
-                                        enabled = settings.copies > 1
-                                    ) { Icon(Icons.Default.Remove, contentDescription = "-") }
-                                    Text("${settings.copies}", modifier = Modifier.padding(horizontal = 8.dp))
-                                    IconButton(
-                                        onClick = { viewModel.updateSettings(settings.copy(copies = settings.copies + 1)) }
-                                    ) { Icon(Icons.Default.Add, contentDescription = "+") }
-                                }
-                            }
-
                             // Paper Size
                             SettingDropdown(
                                 label = "Paper Size",
@@ -207,6 +238,31 @@ fun PrintPreviewScreen(
                                     viewModel.updateSettings(settings.copy(quality = quality))
                                 }
                             )
+
+                            // Fit Mode
+                            SettingDropdown(
+                                label = "Fit Mode",
+                                options = FitMode.entries.map { it.displayName },
+                                selected = settings.fitMode.displayName,
+                                onSelect = { name ->
+                                    val mode = FitMode.entries.firstOrNull { it.displayName == name } ?: FitMode.FIT_TO_PAGE
+                                    viewModel.updateSettings(settings.copy(fitMode = mode))
+                                }
+                            )
+
+                            // Copies
+                            SettingRow("Copies") {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = { if (settings.copies > 1) viewModel.updateSettings(settings.copy(copies = settings.copies - 1)) },
+                                        enabled = settings.copies > 1
+                                    ) { Icon(Icons.Default.Remove, contentDescription = "-") }
+                                    Text("${settings.copies}", modifier = Modifier.padding(horizontal = 8.dp))
+                                    IconButton(
+                                        onClick = { viewModel.updateSettings(settings.copy(copies = settings.copies + 1)) }
+                                    ) { Icon(Icons.Default.Add, contentDescription = "+") }
+                                }
+                            }
                         }
                     }
                 }

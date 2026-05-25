@@ -50,6 +50,12 @@ class PrintPreviewViewModel @Inject constructor(
     private val _printState = MutableStateFlow<PrintState>(PrintState.Idle)
     val printState: StateFlow<PrintState> = _printState.asStateFlow()
 
+    private val _previewBitmap = MutableStateFlow<android.graphics.Bitmap?>(null)
+    val previewBitmap: StateFlow<android.graphics.Bitmap?> = _previewBitmap.asStateFlow()
+
+    private val _previewLoading = MutableStateFlow(false)
+    val previewLoading: StateFlow<Boolean> = _previewLoading.asStateFlow()
+
     sealed class PrintState {
         data object Idle : PrintState()
         data class Printing(val progress: Int, val message: String) : PrintState()
@@ -58,6 +64,24 @@ class PrintPreviewViewModel @Inject constructor(
     }
 
     fun updateSettings(settings: PrintSettings) { _settings.value = settings }
+
+    fun generatePreview(fileUri: Uri) {
+        viewModelScope.launch {
+            _previewLoading.value = true
+            _previewBitmap.value = null
+            try {
+                val localUri = resolveToLocalUri(fileUri)
+                val bitmap = withContext(Dispatchers.IO) {
+                    PrintHelper(context).renderPreviewBitmap(localUri, _settings.value)
+                }
+                _previewBitmap.value = bitmap
+            } catch (e: Exception) {
+                AppLogger.e("PrintVM", "generatePreview failed: ${e.message}")
+            } finally {
+                _previewLoading.value = false
+            }
+        }
+    }
 
     fun print(fileUri: Uri, fileType: FileType) {
         val printer = connectedPrinter.value ?: run {

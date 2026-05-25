@@ -31,6 +31,20 @@ class PrintHelper(private val context: Context) {
 
     // ── Public API ────────────────────────────────────────────────────────────
 
+    suspend fun renderPreviewBitmap(uri: Uri, settings: PrintSettings): android.graphics.Bitmap? =
+        withContext(Dispatchers.IO) {
+            try {
+                val dpi   = 72
+                val paperW = paperWidthPx(settings.paperSize, settings.orientation, dpi)
+                val paperH = paperHeightPx(settings.paperSize, settings.orientation, dpi)
+                AppLogger.i(TAG, "renderPreviewBitmap: ${paperW}x${paperH}px @${dpi}DPI")
+                renderToBitmap(uri, paperW, paperH, settings)
+            } catch (e: Exception) {
+                AppLogger.e(TAG, "renderPreviewBitmap failed: ${e.message}")
+                null
+            }
+        }
+
     suspend fun printUri(
         uri: Uri,
         transport: UsbPrinterTransport,
@@ -110,11 +124,11 @@ class PrintHelper(private val context: Context) {
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = mqid, cm = cm)
         chunks += EscprProtocol.setJob(w, h, dpi)
-        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR" else "MONO"} | setj: ${w}x${h}@${dpi}DPI")
+        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR(cm=0)" else "MONO(cm=1)"} | setj: ${w}x${h}@${dpi}DPI")
 
-        // ── Pages (copies) ────────────────────────────────────────────────────
-        chunks += EscprProtocol.startPage()
+        // ── Pages (copies) — startPage per copy matches python-epson sequence ─
         for (copy in 0 until copies) {
+            chunks += EscprProtocol.startPage()
             chunks += EscprProtocol.pageNumber(copy + 1)
             for (y in 0 until h) {
                 chunks += EscprProtocol.sendLine(y, rows[y])
@@ -125,8 +139,9 @@ class PrintHelper(private val context: Context) {
             Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
 
-        // ── Cleanup — NO printerReset here: it causes an extra blank page ─────
+        // ── Cleanup — printerReset matches TestPageGenerator (confirmed working)
         chunks += EscprProtocol.endJob()
+        chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.loadDefaults()
         chunks += EscprProtocol.jobEnd()
