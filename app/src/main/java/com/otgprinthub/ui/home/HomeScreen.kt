@@ -62,32 +62,22 @@ fun HomeScreen(
 
     fun persistAndNavigate(uri: Uri, fileType: FileType) {
         scope.launch {
-            // Try persistent permission first (fast path, works on most devices)
-            val permOk = runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }.isSuccess
-
-            val finalUri = if (permOk) {
-                uri
-            } else {
-                // Permission didn't persist — copy to private cache so
-                // @ApplicationContext can read it without a URI grant
-                val ext = when (fileType) {
-                    FileType.PDF -> ".pdf"
-                    FileType.IMAGE -> ".jpg"
-                    FileType.TEXT -> ".txt"
-                    else -> ".bin"
-                }
-                withContext(Dispatchers.IO) {
-                    try {
-                        val dest = File(context.cacheDir, "printjob_${System.currentTimeMillis()}$ext")
-                        context.contentResolver.openInputStream(uri)
-                            ?.use { it.copyTo(dest.outputStream()) }
-                        Uri.fromFile(dest)
-                    } catch (_: Exception) { uri }
-                }
+            // Always copy to private cache — Activity context has the temporary
+            // ACTION_OPEN_DOCUMENT grant, but @ApplicationContext in the ViewModel
+            // cannot read MediaDocuments URIs even after takePersistableUriPermission.
+            val ext = when (fileType) {
+                FileType.PDF   -> ".pdf"
+                FileType.IMAGE -> ".jpg"
+                FileType.TEXT  -> ".txt"
+                else           -> ".bin"
+            }
+            val finalUri = withContext(Dispatchers.IO) {
+                try {
+                    val dest = File(context.cacheDir, "printjob_${System.currentTimeMillis()}$ext")
+                    context.contentResolver.openInputStream(uri)
+                        ?.use { it.copyTo(dest.outputStream()) }
+                    if (dest.exists() && dest.length() > 0) Uri.fromFile(dest) else uri
+                } catch (_: Exception) { uri }
             }
 
             val encoded = URLEncoder.encode(finalUri.toString(), "UTF-8")
