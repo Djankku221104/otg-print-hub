@@ -105,7 +105,9 @@ class PrintHelper(private val context: Context) {
         settings: PrintSettings = PrintSettings()
     ): ByteArray {
         val isColor = settings.colorMode == ColorMode.COLOR
-        val cm      = 0  // always COLOR encoding — cm=1 (MONO) fills only ~1/3 of page on L1455
+        // cm=0 → COLOR (CMYK rendering), cm=1 → MONO (K-ink rendering)
+        // Both modes expect 3 bytes/pixel on L1455 — sending 1 byte/pixel with cm=1 caused 1/3 fill
+        val cm      = if (isColor) 0 else 1
         val mqid    = when (settings.quality) {
             PrintQuality.DRAFT  -> 0
             PrintQuality.NORMAL -> 1
@@ -126,7 +128,7 @@ class PrintHelper(private val context: Context) {
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = mqid, cm = cm)
         chunks += EscprProtocol.setJob(w, h, dpi)
-        AppLogger.i(TAG, "setq: mqid=$mqid cm=COLOR(cm=0,${if (isColor) "rgb" else "gray"}) | setj: ${w}x${h}@${dpi}DPI")
+        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR(0)" else "MONO(1)"} data=3bytes/px | setj: ${w}x${h}@${dpi}DPI")
 
         // ── Pages (copies) ────────────────────────────────────────────────────
         // Skip endPage on the LAST copy — endJob() finalizes and ejects the last
