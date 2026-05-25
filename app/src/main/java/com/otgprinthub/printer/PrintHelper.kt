@@ -141,9 +141,10 @@ class PrintHelper(private val context: Context) {
             Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
 
-        // ── Cleanup: endJob exits ESCPR mode. No printerReset/REMOTE1 — they
-        //    cause the printer to eject a blank page after the content page. ──
-        chunks += EscprProtocol.endJob()
+        // ── Cleanup: ESC @ (printerReset) force-exits ESCPR mode.
+        //    endJob() (endj) triggers a blank page eject on L1455 — do NOT send it.
+        //    The next job's printerReset at init recovers any lingering ESCPR state.
+        chunks += EscprProtocol.printerReset()
 
         val totalSize = chunks.sumOf { it.size }
         AppLogger.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")

@@ -48,13 +48,12 @@ startPage()          → ESC p ... "sttp"
 pageNumber(1)        → ESC p ... "setn" [01]
   sendLine(y, data)  → ESC d ... "dsnd" [header + row_data]  × H lines
 endPage(0)           → ESC p ... "endp" [00]
-endJob()             → ESC j ... "endj"
-printerReset()       → ESC @
-enterRemote1()       → ESC(R 08 00 00 "REMOTE1"
-  loadDefaults()     →   LD
-  jobEnd()           →   JE + 3 zero bytes
-exitRemote1()        → ESC 00 00 00
+printerReset()       → ESC @   ← endj/JE/REMOTE1 cleanup mat bhejo — blank page aata hai!
 ```
+
+**CRITICAL (L1455 quirk):** `endJob()` (endj) aur REMOTE1 cleanup (LD+JE) dono blank
+page eject karte hain. Sirf `ESC @` (printerReset) bhejo job end par.
+Agla job ka printerReset lingering ESCPR state handle karega.
 
 ### 2.2 Sabse Badi Galti — enterEscprMode()
 
