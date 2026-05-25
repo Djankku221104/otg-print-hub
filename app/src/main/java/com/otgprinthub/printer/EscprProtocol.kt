@@ -204,9 +204,9 @@ object EscprProtocol {
      * Inner header is BIG-ENDIAN (python-epson struct.pack(">HHBH")):
      *   x_offset(2BE)  y_offset(2BE)  cmode(1)  line_len(2BE)
      *
-     * Pixel values for CM.MONOCHROME:
-     *   0x00 = no ink  = white output
-     *   0xFF = full ink = black output
+     * Pixel values (luminance convention, same for COLOR and MONO on L1455):
+     *   0x00 = 0 luminance = dark  → black ink
+     *   0xFF = 255 luminance = light → no ink (white)
      */
     fun sendLine(y: Int, lineData: ByteArray): ByteArray {
         val lineLen = lineData.size

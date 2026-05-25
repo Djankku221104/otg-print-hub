@@ -131,9 +131,10 @@ class PrintHelper(private val context: Context) {
         AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR(0)" else "MONO(1)"} data=3bytes/px | setj: ${w}x${h}@${dpi}DPI")
 
         // ── Pages (copies) ────────────────────────────────────────────────────
-        // Skip endPage on the LAST copy — endJob() finalizes and ejects the last
-        // page itself. Sending endPage(0) first causes the printer to pre-load a
-        // blank sheet which endJob then ejects (the blank page bug).
+        // L1455 quirk: endJob (endj) causes a blank page eject after the real page.
+        // Fix: always send endPage(pagesLeft) for every copy including the last,
+        // then end with printerReset (ESC @) which ejects cleanly without a blank page.
+        // The next job's printerReset at startup handles any lingering ESCPR state.
         for (copy in 0 until copies) {
             chunks += EscprProtocol.startPage()
             chunks += EscprProtocol.pageNumber(copy + 1)
@@ -142,14 +143,13 @@ class PrintHelper(private val context: Context) {
                 if (y % 1000 == 0) Log.d(TAG, "    line $y/$h (copy ${copy + 1}/$copies)")
             }
             val pagesLeft = copies - 1 - copy
-            if (pagesLeft > 0) {
-                chunks += EscprProtocol.endPage(pagesLeft)
-                Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
-            }
+            chunks += EscprProtocol.endPage(pagesLeft)
+            Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
 
-        // endJob finalizes and ejects the last page — no extra commands needed
-        chunks += EscprProtocol.endJob()
+        // printerReset (ESC @) ejects last page without triggering blank-page feed.
+        // Do NOT use endJob() — it causes an extra blank page on L1455.
+        chunks += EscprProtocol.printerReset()
 
         val totalSize = chunks.sumOf { it.size }
         AppLogger.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")

@@ -172,8 +172,9 @@ object TestPageGenerator {
         chunks += EscprProtocol.startPage()
         chunks += EscprProtocol.pageNumber(1)
         for (y in 0 until printLines) chunks += EscprProtocol.sendLine(y, rowProvider(y))
-        // No endPage(0) — endJob finalizes and ejects without pre-loading a blank sheet
-        chunks += EscprProtocol.endJob()
+        chunks += EscprProtocol.endPage(0)
+        // printerReset (ESC @) ejects without blank-page feed — do NOT use endJob() on L1455
+        chunks += EscprProtocol.printerReset()
 
         val totalSize = chunks.sumOf { it.size }
         Log.i(TAG, "buildEscprJob: $printLines lines → $totalSize bytes (${totalSize / 1024} KB)")

@@ -52,7 +52,14 @@ printerReset()       → ESC @   ← endj/JE/REMOTE1 cleanup mat bhejo — blank
 ```
 
 **CRITICAL (L1455 quirk):** `endJob()` (endj) aur REMOTE1 cleanup (LD+JE) dono blank
-page eject karte hain. Sirf `ESC @` (printerReset) bhejo job end par.
+page eject karte hain. Correct ending sequence:
+
+```
+endPage(0)       ← page close karo (pagesLeft=0 for last copy)
+printerReset()   ← ESC @ ejects cleanly, no blank page
+```
+
+`endJob` (endj) bilkul mat bhejo — isse ek extra blank page eject hota hai.
 Agla job ka printerReset lingering ESCPR state handle karega.
 
 ### 2.2 Sabse Badi Galti — enterEscprMode()
