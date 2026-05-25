@@ -165,9 +165,10 @@ object EscprProtocol {
      *   paperWidth(4BE) paperHeight(4BE) marginTop(2BE) marginLeft(2BE)
      *   printableW(4BE) printableH(4BE) ir(1) pd(1)
      */
-    fun setJob(widthPx: Int, heightPx: Int, dpi: Int = 360): ByteArray {
+    fun setJob(widthPx: Int, heightPx: Int, dpi: Int = 360, unidirec: Boolean = false): ByteArray {
         val ir = when (dpi) { 720 -> 1; 300 -> 2; 600 -> 3; else -> 0 }
-        Log.i(TAG, "setJob: ${widthPx}x${heightPx}px @${dpi}DPI ir=$ir (borderless)")
+        val pd = if (unidirec) 1 else 0
+        Log.i(TAG, "setJob: ${widthPx}x${heightPx}px @${dpi}DPI ir=$ir pd=${if (unidirec) "UNIDIREC" else "BIDIREC"}")
 
         fun int32BE(v: Int) = byteArrayOf(
             ((v shr 24) and 0xFF).toByte(), ((v shr 16) and 0xFF).toByte(),
@@ -181,7 +182,7 @@ object EscprProtocol {
         int32BE(widthPx).copyInto(data, 12)   // printableWidth = paperWidth
         int32BE(heightPx).copyInto(data, 16)  // printableHeight
         data[20] = ir.toByte()
-        data[21] = 0x00  // pd = BIDIREC
+        data[21] = pd.toByte()
 
         return rasterCmd('j'.code.toByte(), "setj", data)
     }

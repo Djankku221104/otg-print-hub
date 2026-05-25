@@ -167,14 +167,14 @@ object TestPageGenerator {
 
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
-        chunks += EscprProtocol.setJob(WIDTH_PX, HEIGHT_PX, DPI)   // always full A4 — no size warning
+        // cm=1 (MONO) prints fast → UNIDIREC (pd=1) prevents banding by halving pass rate
+        chunks += EscprProtocol.setJob(WIDTH_PX, HEIGHT_PX, DPI, unidirec = true)
 
         chunks += EscprProtocol.startPage()
         chunks += EscprProtocol.pageNumber(1)
         for (y in 0 until printLines) chunks += EscprProtocol.sendLine(y, rowProvider(y))
+        // endPage(0) finalizes and ejects — no endJob (causes blank page), no printerReset (interrupts mid-eject)
         chunks += EscprProtocol.endPage(0)
-        // printerReset (ESC @) ejects without blank-page feed — do NOT use endJob() on L1455
-        chunks += EscprProtocol.printerReset()
 
         val totalSize = chunks.sumOf { it.size }
         Log.i(TAG, "buildEscprJob: $printLines lines → $totalSize bytes (${totalSize / 1024} KB)")

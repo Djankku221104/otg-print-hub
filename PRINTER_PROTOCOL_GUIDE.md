@@ -55,12 +55,16 @@ printerReset()       → ESC @   ← endj/JE/REMOTE1 cleanup mat bhejo — blank
 page eject karte hain. Correct ending sequence:
 
 ```
-endPage(0)       ← page close karo (pagesLeft=0 for last copy)
-printerReset()   ← ESC @ ejects cleanly, no blank page
+endPage(pagesLeft)  ← har copy ke baad (last copy mein pagesLeft=0)
+                    ← koi endJob, koi printerReset nahi!
 ```
 
-`endJob` (endj) bilkul mat bhejo — isse ek extra blank page eject hota hai.
-Agla job ka printerReset lingering ESCPR state handle karega.
+- `endPage(0)` page finalize aur eject karta hai cleanly.
+- `endJob` (endj) mat bhejo — extra blank page eject hota hai.
+- `printerReset (ESC @)` data stream mein mat bhejo — printer mid-eject reset ho jaata hai,
+  print last section mein freeze ho jaata hai (printer abhi bhi buffer print kar raha hota hai
+  jab reset command receive hoti hai).
+- Agla job ka `exitPacketMode + printerReset` lingering ESCPR state handle karega.
 
 ### 2.2 Sabse Badi Galti — enterEscprMode()
 
@@ -83,10 +87,19 @@ Source: `python-epson/epson/escpr.py`, `epson-inkjet-printer-escpr` official dri
 
 ### 2.3 setJob — Paper Dimensions (22 bytes, BIG-ENDIAN)
 
+**pd (print direction) field:**
+- `pd=0` (BIDIREC): head prints on both forward and return strokes — faster.
+- `pd=1` (UNIDIREC): head prints only on forward stroke — half the speed.
+
+**L1455 quirk:** cm=1 (MONO) uses only the K nozzle bank in a single fast pass per band.
+This is fast enough to outrun the USB data pipeline, causing horizontal banding lines.
+Fix: use `pd=1` (UNIDIREC) for cm=1 — halves the effective pass rate, eliminates banding.
+cm=0 (COLOR) is multi-pass CMYK; BIDIREC is fine.
+
 ```kotlin
-fun setJob(widthPx: Int, heightPx: Int, dpi: Int = 360): ByteArray {
+fun setJob(widthPx: Int, heightPx: Int, dpi: Int = 360, unidirec: Boolean = false): ByteArray {
     // ir: 0=360DPI, 1=720DPI, 2=300DPI, 3=600DPI
-    // pd: 0=BIDIREC, 1=UNIDIREC
+    // pd: 0=BIDIREC (color), 1=UNIDIREC (mono — required to prevent banding)
     // Layout: paperW(4BE) paperH(4BE) marginTop(2BE) marginLeft(2BE)
     //         printW(4BE) printH(4BE) ir(1) pd(1)
 }
