@@ -60,7 +60,7 @@ class PrintHelper(private val context: Context) {
 
             AppLogger.separator("printUri")
             AppLogger.i(TAG, "Settings: size=${settings.paperSize.name} orient=${settings.orientation.name} color=${settings.colorMode.name} quality=${settings.quality.name} fit=${settings.fitMode.name} copies=$copies")
-            AppLogger.i(TAG, "Computed: paperW=${paperW}px paperH=${paperH}px @${dpi}DPI cm=0(always)")
+            AppLogger.i(TAG, "Computed: paperW=${paperW}px paperH=${paperH}px @${dpi}DPI cm=0 (COLOR always)")
             Log.i(TAG, "═══ printUri START ═══ ${paperW}x${paperH}px @${dpi}DPI color=$isColor copies=$copies")
 
             onProgress("Rendering document…")
@@ -105,9 +105,13 @@ class PrintHelper(private val context: Context) {
         settings: PrintSettings = PrintSettings()
     ): ByteArray {
         val isColor = settings.colorMode == ColorMode.COLOR
-        // cm=0 → COLOR (CMYK rendering), cm=1 → MONO (K-ink rendering)
-        // Both modes expect 3 bytes/pixel on L1455 — sending 1 byte/pixel with cm=1 caused 1/3 fill
-        val cm      = if (isColor) 0 else 1
+        // Always use cm=0 (COLOR mode) even for GRAYSCALE/B&W.
+        // L1455 with cm=1 (MONO) produces horizontal banding regardless of pd setting.
+        // Root cause: the printer's MONO rendering engine uses a halftoning pass pattern
+        // that creates visible bands. cm=0 with grayscale pixel data (R=G=B per pixel)
+        // eliminates banding — the printer renders gray/black content correctly since
+        // renderToBitmap() already applies toGrayscale() for non-color modes.
+        val cm      = 0
         val mqid    = when (settings.quality) {
             PrintQuality.DRAFT  -> 0
             PrintQuality.NORMAL -> 1
@@ -117,8 +121,12 @@ class PrintHelper(private val context: Context) {
         val chunks  = mutableListOf<ByteArray>()
 
         // ── Init ──────────────────────────────────────────────────────────────
+        // exitPacketMode (EJL sequence) exits any ESCPR/packet mode the printer may be in.
+        // printerReset (ESC @) is intentionally NOT sent here — it performs a form-feed
+        // (paper advance to top-of-form) which ejects any sheet pre-loaded by the previous
+        // job's endJob, producing a blank page. The SOFT_RESET via USB Class control request
+        // in initPrinter() handles USB-level cleanup without causing a paper advance.
         chunks += EscprProtocol.exitPacketMode()
-        chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.timestamp()
         chunks += EscprProtocol.jobStart()
@@ -127,19 +135,14 @@ class PrintHelper(private val context: Context) {
 
         chunks += EscprProtocol.enterEscprMode()
         chunks += EscprProtocol.setQuality(mtid = 0, mqid = mqid, cm = cm)
-        // pd=UNIDIREC for MONO/GRAY: MONO prints one fast K-pass per band; BIDIREC causes banding
-        // because the head moves faster than data can be processed. UNIDIREC halves the pass rate,
-        // eliminating the under-run. COLOR stays BIDIREC — it already matches the data rate.
-        chunks += EscprProtocol.setJob(w, h, dpi, unidirec = !isColor)
-        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR(0)" else "MONO(1)"} pd=${if (isColor) "BIDIREC" else "UNIDIREC"} data=3bytes/px | setj: ${w}x${h}@${dpi}DPI")
+        chunks += EscprProtocol.setJob(w, h, dpi)
+        AppLogger.i(TAG, "setq: mqid=$mqid cm=COLOR(0) always (cm=1 causes banding on L1455) | setj: ${w}x${h}@${dpi}DPI")
 
         // ── Pages (copies) ────────────────────────────────────────────────────
-        // L1455 quirk: endJob (endj) causes an extra blank page eject.
-        // printerReset (ESC @) sent inside the data stream resets the printer before
-        // it finishes ejecting, causing the print to freeze at the last section.
-        // Fix: endPage(pagesLeft) for every copy; endPage(0) on the last copy finalizes
-        // and ejects cleanly. No endJob, no printerReset at the end.
-        // The next job's exitPacketMode + printerReset at startup clears ESCPR state.
+        // endJob is required for the L1455 to finalize and eject the page.
+        // Without endJob the printer holds the page and appears frozen at end.
+        // endPage(pagesLeft) signals copies remaining; endPage(0) on last copy
+        // closes the final page, then endJob triggers ejection.
         for (copy in 0 until copies) {
             chunks += EscprProtocol.startPage()
             chunks += EscprProtocol.pageNumber(copy + 1)
@@ -151,6 +154,7 @@ class PrintHelper(private val context: Context) {
             chunks += EscprProtocol.endPage(pagesLeft)
             Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
+        chunks += EscprProtocol.endJob()
 
         val totalSize = chunks.sumOf { it.size }
         AppLogger.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")

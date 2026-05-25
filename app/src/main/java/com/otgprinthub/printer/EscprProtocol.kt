@@ -13,12 +13,17 @@ import android.util.Log
  *   - Pixel format: 1 byte/pixel for CM.MONO       (NOT 1bpp packed)
  *   - setq/setj replace ESC(U / ESC(C / ESC(D
  *
- * Full job sequence:
- *   exitPacketMode → printerReset → REMOTE1(TI+JS+PP) → exitRemote1
+ * Full job sequence (L1455 confirmed):
+ *   exitPacketMode → REMOTE1(TI+JS+PP) → exitRemote1
  *   → enterEscprMode → setQuality → setJob
- *   → startPage → pageNumber → [sendLine x H] → endPage
+ *   → [per copy: startPage → pageNumber → sendLine×H → endPage(pagesLeft)]
  *   → endJob
- *   → printerReset → REMOTE1(LD+JE) → exitRemote1
+ *
+ *   NOTE: printerReset (ESC @) is intentionally OMITTED at job start.
+ *   ESC @ performs a form-feed which ejects any paper pre-loaded by the previous
+ *   endJob, producing a blank page. SOFT_RESET via USB control request + exitPacketMode
+ *   handle state cleanup without paper advance.
+ *   REMOTE1(LD+JE) cleanup at end also omitted — causes blank page on L1455.
  */
 object EscprProtocol {
 

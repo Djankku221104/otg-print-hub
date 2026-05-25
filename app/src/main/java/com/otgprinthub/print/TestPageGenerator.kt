@@ -66,16 +66,16 @@ object TestPageGenerator {
     // ── T1: ESCPR Solid Black ─────────────────────────────────────────────────────
     private fun escprSolid(): ByteArray {
         val lines = 100
-        Log.i(TAG, "escprSolid: $lines black lines @ $WIDTH_PX px")
-        val blackRow = ByteArray(WIDTH_PX) { 0x00 }
+        Log.i(TAG, "escprSolid: $lines black lines @ $WIDTH_PX px (3 bytes/px, cm=0)")
+        val blackRow = ByteArray(WIDTH_PX * 3) { 0x00 }   // [R=0,G=0,B=0] × WIDTH = black
         return buildEscprJob(lines) { y -> blackRow }
     }
 
     // ── T2: ESCPR 50% Gray ────────────────────────────────────────────────────────
     private fun escprGray(): ByteArray {
         val lines = 100
-        Log.i(TAG, "escprGray: $lines gray lines @ $WIDTH_PX px")
-        val grayRow = ByteArray(WIDTH_PX) { 0x80.toByte() }   // 50% luminance = 50% ink
+        Log.i(TAG, "escprGray: $lines gray lines @ $WIDTH_PX px (3 bytes/px, cm=0)")
+        val grayRow = ByteArray(WIDTH_PX * 3) { 0x80.toByte() }   // [R=128,G=128,B=128] = 50% gray
         return buildEscprJob(lines) { y -> grayRow }
     }
 
@@ -116,8 +116,8 @@ object TestPageGenerator {
         val bands = 6                            // 3 black + 3 white = 180 lines total
         val totalLines = bandHeight * bands
         Log.i(TAG, "escprStripes: $bands bands x $bandHeight lines = $totalLines lines")
-        val blackRow = ByteArray(WIDTH_PX) { 0x00 }
-        val whiteRow = ByteArray(WIDTH_PX) { 0xFF.toByte() }
+        val blackRow = ByteArray(WIDTH_PX * 3) { 0x00 }
+        val whiteRow = ByteArray(WIDTH_PX * 3) { 0xFF.toByte() }
         return buildEscprJob(totalLines) { y ->
             if ((y / bandHeight) % 2 == 0) blackRow else whiteRow
         }
@@ -132,12 +132,16 @@ object TestPageGenerator {
 
         Log.i(TAG, "escprNozzle: $numLines vertical lines, spacing=${spacing}px, $lines rows")
 
-        // Pre-build the nozzle row (same for every y)
-        val nozzleRow = ByteArray(WIDTH_PX) { 0xFF.toByte() }   // white base
+        // Pre-build the nozzle row (3 bytes/pixel for cm=0)
+        val nozzleRow = ByteArray(WIDTH_PX * 3) { 0xFF.toByte() }   // white base
         for (n in 1..numLines) {
             val start = (spacing * n) - lineWidth / 2
             for (x in start until (start + lineWidth)) {
-                if (x in 0 until WIDTH_PX) nozzleRow[x] = 0x00   // black line
+                if (x in 0 until WIDTH_PX) {
+                    nozzleRow[x * 3]     = 0x00   // R
+                    nozzleRow[x * 3 + 1] = 0x00   // G
+                    nozzleRow[x * 3 + 2] = 0x00   // B = black line
+                }
             }
         }
 
@@ -147,8 +151,8 @@ object TestPageGenerator {
     // ── T6: ESCPR Full 500 Lines ──────────────────────────────────────────────────
     private fun escprFull(): ByteArray {
         val lines = 500
-        Log.i(TAG, "escprFull: $lines black lines @ $WIDTH_PX px")
-        val blackRow = ByteArray(WIDTH_PX) { 0x00 }
+        Log.i(TAG, "escprFull: $lines black lines @ $WIDTH_PX px (3 bytes/px, cm=0)")
+        val blackRow = ByteArray(WIDTH_PX * 3) { 0x00 }
         return buildEscprJob(lines) { blackRow }
     }
 
@@ -157,8 +161,8 @@ object TestPageGenerator {
     private fun buildEscprJob(printLines: Int, rowProvider: (Int) -> ByteArray): ByteArray {
         val chunks = mutableListOf<ByteArray>()
 
+        // printerReset (ESC @) omitted — it form-feeds pre-loaded paper → blank page
         chunks += EscprProtocol.exitPacketMode()
-        chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.timestamp()
         chunks += EscprProtocol.jobStart()
@@ -166,15 +170,17 @@ object TestPageGenerator {
         chunks += EscprProtocol.exitRemote1()
 
         chunks += EscprProtocol.enterEscprMode()
-        chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
-        // cm=1 (MONO) prints fast → UNIDIREC (pd=1) prevents banding by halving pass rate
-        chunks += EscprProtocol.setJob(WIDTH_PX, HEIGHT_PX, DPI, unidirec = true)
+        // cm=0 (COLOR) always — L1455 with cm=1 causes banding and expects 3 bytes/pixel
+        // even for mono; sending 1 byte/pixel with cm=1 renders only 1/3 page width.
+        chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 0)
+        chunks += EscprProtocol.setJob(WIDTH_PX, HEIGHT_PX, DPI)
 
         chunks += EscprProtocol.startPage()
         chunks += EscprProtocol.pageNumber(1)
         for (y in 0 until printLines) chunks += EscprProtocol.sendLine(y, rowProvider(y))
-        // endPage(0) finalizes and ejects — no endJob (causes blank page), no printerReset (interrupts mid-eject)
         chunks += EscprProtocol.endPage(0)
+        // endJob is required for the printer to eject — without it the paper freezes at end
+        chunks += EscprProtocol.endJob()
 
         val totalSize = chunks.sumOf { it.size }
         Log.i(TAG, "buildEscprJob: $printLines lines → $totalSize bytes (${totalSize / 1024} KB)")
