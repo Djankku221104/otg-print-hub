@@ -6,156 +6,134 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import com.otgprinthub.domain.model.ColorMode
+import com.otgprinthub.domain.model.FitMode
+import com.otgprinthub.domain.model.Orientation
+import com.otgprinthub.domain.model.PaperSize
+import com.otgprinthub.domain.model.PrintQuality
+import com.otgprinthub.domain.model.PrintSettings
 import com.otgprinthub.usb.UsbPrinterTransport
 import com.otgprinthub.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/**
- * Ties together document rendering, ESCPR job building, and USB transfer.
- *
- * Protocol: ESC/P-R (ESCPR) — confirmed from python-epson + epson-inkjet-printer-escpr.
- * Pixel format: CM.MONOCHROME, 1 byte/pixel (0x00=white, 0xFF=black), per-line dsnd.
- *
- * For debugging, filter logcat: adb logcat -s ESCPR PrintHelper RasterConv
- */
 class PrintHelper(private val context: Context) {
 
     private val TAG = "PrintHelper"
-
-    val dpi      = 360
-    val widthPx  = mmToPx(210.0, dpi)   // A4 = 2976 px at 360 DPI
-    val heightPx = mmToPx(297.0, dpi)   // A4 = 4209 px at 360 DPI
 
     // ── Public API ────────────────────────────────────────────────────────────
 
     suspend fun printUri(
         uri: Uri,
         transport: UsbPrinterTransport,
+        settings: PrintSettings = PrintSettings(),
         onProgress: (String) -> Unit = {}
     ): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            Log.i(TAG, "═══ printUri START ═══ ${widthPx}x${heightPx}px @${dpi}DPI")
+            val dpi     = escprDpi(settings.quality)
+            val paperW  = paperWidthPx(settings.paperSize, settings.orientation, dpi)
+            val paperH  = paperHeightPx(settings.paperSize, settings.orientation, dpi)
+            val isColor = settings.colorMode == ColorMode.COLOR
+            val copies  = settings.copies.coerceIn(1, 99)
+
+            AppLogger.separator("printUri")
+            AppLogger.i(TAG, "Paper: ${paperW}x${paperH}px @${dpi}DPI | ${settings.colorMode} | ${settings.quality} | x$copies")
+            Log.i(TAG, "═══ printUri START ═══ ${paperW}x${paperH}px @${dpi}DPI color=$isColor copies=$copies")
+
             onProgress("Rendering document…")
-            val bitmap = renderToBitmap(uri)
+            val bitmap = renderToBitmap(uri, paperW, paperH, settings)
                 ?: return@withContext Result.failure(Exception("Cannot render document"))
 
             Log.i(TAG, "Rendered bitmap: ${bitmap.width}x${bitmap.height}px")
             onProgress("Converting to ink data…")
-            val rows = ImageToRasterConverter.toInkRows(bitmap)
+
+            val rows = if (isColor)
+                ImageToRasterConverter.toColorInkRows(bitmap)
+            else
+                ImageToRasterConverter.toInkRows(bitmap)
             bitmap.recycle()
-            Log.i(TAG, "Ink rows: ${rows.size} rows x ${rows.firstOrNull()?.size ?: 0} bytes")
+            AppLogger.i(TAG, "Ink rows: ${rows.size} rows x ${rows.firstOrNull()?.size ?: 0} bytes/row")
 
             onProgress("Building ESCPR job…")
-            val jobBytes = buildEscprJob(rows, widthPx, heightPx)
-            Log.i(TAG, "Job built: ${jobBytes.size} bytes (${jobBytes.size / 1024} KB)")
+            val jobBytes = buildEscprJob(rows, paperW, paperH, dpi, settings)
+            AppLogger.i(TAG, "Job built: ${jobBytes.size / 1024} KB")
 
             onProgress("Sending ${jobBytes.size / 1024} KB…")
             sendJob(jobBytes, transport, onProgress)
 
+            AppLogger.i(TAG, "═══ printUri DONE ═══")
             Log.i(TAG, "═══ printUri DONE ═══")
             Result.success(Unit)
         } catch (e: Exception) {
+            AppLogger.e(TAG, "printUri FAILED: ${e.message}")
             Log.e(TAG, "═══ printUri FAILED: ${e.message} ═══", e)
             Result.failure(e)
         }
     }
 
-    /**
-     * Diagnostic: 100 solid-black lines using ESCPR protocol.
-     * Run this first to verify protocol before trying real documents.
-     */
-    suspend fun printTestBlock(transport: UsbPrinterTransport): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            try {
-                val testLines = 100
-                AppLogger.separator("printTestBlock")
-                AppLogger.i(TAG, "${widthPx}px x $testLines lines, ESCPR CM.MONO")
-                val rows = ImageToRasterConverter.solidBlackInkRows(widthPx, testLines)
-                val jobBytes = buildEscprJob(rows, widthPx, testLines)
-                AppLogger.i(TAG, "Job size: ${jobBytes.size} bytes")
-                AppLogger.i(TAG, "Header hex: " + jobBytes.take(32).joinToString(" ") { "%02X".format(it.toInt() and 0xFF) })
-                sendJob(jobBytes, transport)
-                AppLogger.i(TAG, "printTestBlock DONE - check printer!")
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Log.e(TAG, "printTestBlock FAILED", e)
-                Result.failure(e)
-            }
-        }
-
     // ── Job builder ───────────────────────────────────────────────────────────
 
-    fun buildEscprJob(bitmap: Bitmap): ByteArray {
-        val bmp = if (bitmap.width == widthPx && bitmap.height == heightPx) bitmap
-                  else scaleBitmap(bitmap)
-        val rows = ImageToRasterConverter.toInkRows(bmp)
-        if (bmp !== bitmap) bmp.recycle()
-        return buildEscprJob(rows, bmp.width, bmp.height)
-    }
+    fun buildEscprJob(
+        rows: List<ByteArray>,
+        w: Int,
+        h: Int,
+        dpi: Int = 360,
+        settings: PrintSettings = PrintSettings()
+    ): ByteArray {
+        val isColor = settings.colorMode == ColorMode.COLOR
+        val cm      = if (isColor) 0 else 1
+        val mqid    = when (settings.quality) {
+            PrintQuality.DRAFT  -> 0
+            PrintQuality.NORMAL -> 1
+            PrintQuality.HIGH, PrintQuality.BEST -> 2
+        }
+        val copies  = settings.copies.coerceIn(1, 99)
+        val chunks  = mutableListOf<ByteArray>()
 
-    /**
-     * Build complete ESCPR job from ink rows.
-     *
-     * Sequence (per python-epson Job._start / print_pages / _end):
-     *   exitPacketMode + printerReset
-     *   REMOTE1: TI + JS + PP → exit
-     *   enterEscprMode + setQuality(MONO) + setJob
-     *   startPage + pageNumber(1) + [sendLine×H] + endPage(0)
-     *   endJob
-     *   printerReset + REMOTE1: LD + JE → exit
-     */
-    fun buildEscprJob(rows: List<ByteArray>, w: Int, h: Int): ByteArray {
-        val chunks = mutableListOf<ByteArray>()
-
+        // ── Init ──────────────────────────────────────────────────────────────
         chunks += EscprProtocol.exitPacketMode()
-        Log.d(TAG, "[1] exitPacketMode")
-
         chunks += EscprProtocol.printerReset()
-        Log.d(TAG, "[2] printerReset")
-
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.timestamp()
         chunks += EscprProtocol.jobStart()
         chunks += EscprProtocol.paperPath()
         chunks += EscprProtocol.exitRemote1()
-        Log.d(TAG, "[3] REMOTE1 done")
 
         chunks += EscprProtocol.enterEscprMode()
-        chunks += EscprProtocol.setQuality(mtid = 0, mqid = 1, cm = 1)
+        chunks += EscprProtocol.setQuality(mtid = 0, mqid = mqid, cm = cm)
         chunks += EscprProtocol.setJob(w, h, dpi)
-        AppLogger.i(TAG, "[4] ESCPR mode: setq(PLAIN,NORMAL,MONO) + setj(${w}x${h}@${dpi}DPI)")
-        Log.d(TAG, "[4] ESCPR mode, setq+setj for ${w}x${h}px")
+        AppLogger.i(TAG, "setq: mqid=$mqid cm=${if (isColor) "COLOR" else "MONO"} | setj: ${w}x${h}@${dpi}DPI")
 
+        // ── Pages (copies) ────────────────────────────────────────────────────
         chunks += EscprProtocol.startPage()
-        chunks += EscprProtocol.pageNumber(1)
-        Log.i(TAG, "[5] Encoding $h lines @ $w bytes/line…")
-
-        for (y in 0 until h) {
-            chunks += EscprProtocol.sendLine(y, rows[y])
-            if (y % 500 == 0) Log.d(TAG, "    line $y/$h")
+        for (copy in 0 until copies) {
+            chunks += EscprProtocol.pageNumber(copy + 1)
+            for (y in 0 until h) {
+                chunks += EscprProtocol.sendLine(y, rows[y])
+                if (y % 1000 == 0) Log.d(TAG, "    line $y/$h (copy ${copy + 1}/$copies)")
+            }
+            val pagesLeft = copies - 1 - copy
+            chunks += EscprProtocol.endPage(pagesLeft)
+            Log.d(TAG, "endPage: pagesLeft=$pagesLeft")
         }
-        Log.i(TAG, "[5] All $h lines done")
 
-        chunks += EscprProtocol.endPage(0)
+        // ── Cleanup — NO printerReset here: it causes an extra blank page ─────
         chunks += EscprProtocol.endJob()
-        Log.d(TAG, "[6] endPage + endJob")
-
-        chunks += EscprProtocol.printerReset()
         chunks += EscprProtocol.enterRemote1()
         chunks += EscprProtocol.loadDefaults()
         chunks += EscprProtocol.jobEnd()
         chunks += EscprProtocol.exitRemote1()
-        Log.d(TAG, "[7] cleanup done")
 
         val totalSize = chunks.sumOf { it.size }
-        Log.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")
+        AppLogger.i(TAG, "Total job size: $totalSize bytes (${totalSize / 1024} KB)")
 
         val result = ByteArray(totalSize)
         var offset = 0
@@ -165,96 +143,151 @@ class PrintHelper(private val context: Context) {
 
     // ── Document rendering ────────────────────────────────────────────────────
 
-    private fun renderToBitmap(uri: Uri): Bitmap? {
+    private fun renderToBitmap(uri: Uri, w: Int, h: Int, settings: PrintSettings): Bitmap? {
         val mime = context.contentResolver.getType(uri) ?: inferMime(uri)
-        AppLogger.i(TAG, "renderToBitmap: scheme=${uri.scheme} mime=$mime")
-        Log.d(TAG, "renderToBitmap: mime=$mime uri=$uri")
+        val isColor = settings.colorMode == ColorMode.COLOR
+        AppLogger.i(TAG, "renderToBitmap: scheme=${uri.scheme} mime=$mime color=$isColor")
         val result = when {
-            mime?.contains("pdf")     == true -> renderPdf(uri)
-            mime?.startsWith("image") == true -> renderImage(uri)
-            mime?.startsWith("text")  == true -> renderText(uri)
+            mime?.contains("pdf")     == true -> renderPdf(uri, w, h, settings)
+            mime?.startsWith("image") == true -> renderImage(uri, w, h, settings)
+            mime?.startsWith("text")  == true -> renderText(uri, w, h)
             else -> {
                 AppLogger.w(TAG, "Unknown MIME '$mime', trying image then text")
-                Log.w(TAG, "Unknown MIME, trying image then text")
-                renderImage(uri) ?: renderText(uri)
+                renderImage(uri, w, h, settings) ?: renderText(uri, w, h)
             }
         }
-        if (result == null) AppLogger.e(TAG, "renderToBitmap NULL — scheme=${uri.scheme} mime=$mime")
+        if (result == null) AppLogger.e(TAG, "renderToBitmap NULL — mime=$mime uri=$uri")
         return result
     }
 
-    private fun renderPdf(uri: Uri): Bitmap? {
+    private fun renderPdf(uri: Uri, w: Int, h: Int, settings: PrintSettings): Bitmap? {
         val fd = openFd(uri)
-        if (fd == null) { AppLogger.e(TAG, "renderPdf: openFd returned null for ${uri.scheme}://${uri.path}"); return null }
+        if (fd == null) {
+            AppLogger.e(TAG, "renderPdf: openFd null for ${uri.scheme}")
+            return null
+        }
         return try {
             PdfRenderer(fd).use { renderer ->
-                if (renderer.pageCount == 0) { AppLogger.e(TAG, "renderPdf: pageCount=0"); return null }
+                if (renderer.pageCount == 0) { AppLogger.e(TAG, "renderPdf: 0 pages"); return null }
                 renderer.openPage(0).use { page ->
-                    AppLogger.i(TAG, "PDF page ${page.width}x${page.height}pt → ${widthPx}x${heightPx}px")
-                    Log.d(TAG, "PDF page ${page.width}x${page.height}pt → ${widthPx}x${heightPx}px")
-                    val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+                    AppLogger.i(TAG, "PDF page: ${page.width}x${page.height}pt, target ${w}x${h}px")
+
+                    // Calculate destination rect that fits the PDF page within the paper bitmap
+                    val dstRect = fitRect(page.width.toFloat(), page.height.toFloat(), w, h, settings)
+
+                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
                     bmp.eraseColor(Color.WHITE)
-                    page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
-                    toGrayscale(bmp)
+                    page.render(bmp, dstRect, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+
+                    if (settings.colorMode == ColorMode.COLOR) bmp else toGrayscale(bmp)
                 }
             }
         } catch (e: Exception) {
             AppLogger.e(TAG, "renderPdf exception: ${e.message}")
-            Log.e(TAG, "PDF render failed", e)
             null
         }
     }
 
-    private fun renderImage(uri: Uri): Bitmap? {
+    private fun renderImage(uri: Uri, w: Int, h: Int, settings: PrintSettings): Bitmap? {
         return try {
             val stream = openStream(uri)
-            if (stream == null) { AppLogger.e(TAG, "renderImage: openStream null for ${uri.scheme}"); return null }
+            if (stream == null) { AppLogger.e(TAG, "renderImage: openStream null"); return null }
             val raw = BitmapFactory.decodeStream(stream)
             stream.close()
-            if (raw == null) { AppLogger.e(TAG, "renderImage: BitmapFactory returned null"); return null }
+            if (raw == null) { AppLogger.e(TAG, "renderImage: BitmapFactory null"); return null }
             AppLogger.i(TAG, "Image decoded: ${raw.width}x${raw.height}")
-            Log.d(TAG, "Image: ${raw.width}x${raw.height}")
-            toGrayscale(scaleBitmap(raw)).also { if (it !== raw) raw.recycle() }
+
+            val scaled = scaleBitmap(raw, w, h, settings)
+            if (scaled !== raw) raw.recycle()
+
+            if (settings.colorMode == ColorMode.COLOR) scaled else toGrayscale(scaled)
         } catch (e: Exception) {
             AppLogger.e(TAG, "renderImage exception: ${e.message}")
-            Log.e(TAG, "Image render failed", e)
             null
         }
     }
 
-    private fun renderText(uri: Uri): Bitmap? {
+    private fun renderText(uri: Uri, w: Int, h: Int): Bitmap? {
         return try {
             val stream = openStream(uri)
-            if (stream == null) { AppLogger.e(TAG, "renderText: openStream null for ${uri.scheme}"); return null }
+            if (stream == null) { AppLogger.e(TAG, "renderText: openStream null"); return null }
             val text = stream.bufferedReader().readText()
             AppLogger.i(TAG, "Text: ${text.length} chars, ${text.lines().size} lines")
-            Log.d(TAG, "Text: ${text.length} chars, ${text.lines().size} lines")
-            renderTextToBitmap(text)
+            renderTextToBitmap(text, w, h)
         } catch (e: Exception) {
             AppLogger.e(TAG, "renderText exception: ${e.message}")
-            Log.e(TAG, "Text render failed", e)
             null
         }
     }
 
-    private fun renderTextToBitmap(text: String): Bitmap {
-        val bmp    = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
+    private fun renderTextToBitmap(text: String, w: Int, h: Int): Bitmap {
+        val bmp    = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         bmp.eraseColor(Color.WHITE)
         val canvas = Canvas(bmp)
-        val paint  = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val marginPx = (w * 0.05f)          // 5% margin on each side
+        val availW   = w - 2 * marginPx
+        val paint    = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color    = Color.BLACK
-            textSize = 28f
+            textSize = (w / 80f).coerceIn(20f, 40f)   // scale text to paper width
             typeface = Typeface.MONOSPACE
         }
-        val margin     = 60f
-        val lineHeight = paint.textSize * 1.4f
-        var y          = margin + paint.textSize
+        val charsPerLine = (availW / (paint.textSize * 0.6f)).toInt().coerceAtLeast(1)
+        val lineHeight   = paint.textSize * 1.5f
+        var y            = marginPx + paint.textSize
+
         text.lines().forEach { line ->
-            if (y + lineHeight > heightPx - margin) return@forEach
-            canvas.drawText(line.take(120), margin, y, paint)
-            y += lineHeight
+            if (y + lineHeight > h - marginPx) return@forEach
+            // Wrap long lines
+            var remaining = line
+            while (remaining.isNotEmpty() && y + lineHeight <= h - marginPx) {
+                val chunk = remaining.take(charsPerLine)
+                canvas.drawText(chunk, marginPx, y, paint)
+                remaining = remaining.drop(charsPerLine)
+                y += lineHeight
+            }
         }
         return bmp
+    }
+
+    // ── Bitmap scaling ────────────────────────────────────────────────────────
+
+    private fun scaleBitmap(src: Bitmap, w: Int, h: Int, settings: PrintSettings): Bitmap {
+        if (src.width == w && src.height == h) return src
+        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        out.eraseColor(Color.WHITE)
+        val dstRect = fitRect(src.width.toFloat(), src.height.toFloat(), w, h, settings)
+        Canvas(out).drawBitmap(src, null, RectF(dstRect), Paint(Paint.FILTER_BITMAP_FLAG))
+        AppLogger.i(TAG, "scaled: ${src.width}x${src.height} → ${dstRect.width()}x${dstRect.height()} in ${w}x${h}")
+        return out
+    }
+
+    /**
+     * Compute destination Rect that places content within [targetW x targetH]
+     * according to FitMode (fit/fill/center/actual-size).
+     */
+    private fun fitRect(srcW: Float, srcH: Float, targetW: Int, targetH: Int, settings: PrintSettings): Rect {
+        val scale = when (settings.fitMode) {
+            FitMode.FIT_TO_PAGE  -> minOf(targetW / srcW, targetH / srcH)
+            FitMode.FILL_PAGE    -> maxOf(targetW / srcW, targetH / srcH)
+            FitMode.ACTUAL_SIZE  -> 1f
+            FitMode.CENTER       -> minOf(1f, minOf(targetW / srcW, targetH / srcH))
+        }
+        val dstW = (srcW * scale).toInt().coerceAtMost(targetW)
+        val dstH = (srcH * scale).toInt().coerceAtMost(targetH)
+        val dx   = (targetW - dstW) / 2
+        val dy   = (targetH - dstH) / 2
+        return Rect(dx, dy, dx + dstW, dy + dstH)
+    }
+
+    private fun toGrayscale(src: Bitmap): Bitmap {
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        Canvas(out).drawBitmap(src, 0f, 0f, Paint().apply {
+            colorFilter = android.graphics.ColorMatrixColorFilter(
+                android.graphics.ColorMatrix().also { it.setSaturation(0f) }
+            )
+        })
+        if (out !== src) src.recycle()
+        return out
     }
 
     // ── USB send ──────────────────────────────────────────────────────────────
@@ -265,56 +298,40 @@ class PrintHelper(private val context: Context) {
         onProgress: (String) -> Unit = {}
     ) {
         val total = data.size
-        AppLogger.i(TAG, "USB send: $total bytes")
-        Log.i(TAG, "sendJob: sending $total bytes via USB")
         transport.sendData(data).collect { result ->
             when (result) {
                 is UsbPrinterTransport.TransferResult.Progress -> {
                     val pct = (result.bytesSent * 100 / total).toInt()
-                    if (pct % 20 == 0) AppLogger.d(TAG, "USB: ${result.bytesSent}/$total ($pct%)")
-                    Log.d(TAG, "USB progress: ${result.bytesSent}/$total ($pct%)")
                     onProgress("Sent ${result.bytesSent / 1024}/${total / 1024} KB ($pct%)")
                 }
                 is UsbPrinterTransport.TransferResult.Error -> {
                     AppLogger.e(TAG, "USB ERROR: ${result.message}")
-                    Log.e(TAG, "USB transfer error: ${result.message}")
                     throw Exception("USB error: ${result.message}")
                 }
                 is UsbPrinterTransport.TransferResult.Complete -> {
                     AppLogger.i(TAG, "USB transfer COMPLETE")
-                    Log.i(TAG, "USB transfer complete")
                 }
                 else -> {}
             }
         }
     }
 
-    // ── Bitmap utilities ──────────────────────────────────────────────────────
+    // ── Paper size helpers ────────────────────────────────────────────────────
 
-    private fun scaleBitmap(src: Bitmap): Bitmap {
-        if (src.width == widthPx && src.height == heightPx) return src
-        val scale = minOf(widthPx.toFloat() / src.width, heightPx.toFloat() / src.height)
-        val dstW  = (src.width  * scale).toInt()
-        val dstH  = (src.height * scale).toInt()
-        val out   = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
-        out.eraseColor(Color.WHITE)
-        val dx = (widthPx  - dstW) / 2f
-        val dy = (heightPx - dstH) / 2f
-        Canvas(out).drawBitmap(src, null, android.graphics.RectF(dx, dy, dx + dstW, dy + dstH), Paint(Paint.FILTER_BITMAP_FLAG))
-        Log.d(TAG, "scaleBitmap: ${src.width}x${src.height} → ${dstW}x${dstH}")
-        return out
+    private fun escprDpi(quality: PrintQuality): Int = when (quality) {
+        PrintQuality.HIGH, PrintQuality.BEST -> 360   // keep 360 — 720 DPI bitmaps are ~200MB
+        else -> 360
     }
 
-    private fun toGrayscale(src: Bitmap): Bitmap {
-        val out    = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.drawBitmap(src, 0f, 0f, Paint().apply {
-            colorFilter = android.graphics.ColorMatrixColorFilter(
-                android.graphics.ColorMatrix().also { it.setSaturation(0f) }
-            )
-        })
-        if (out !== src) src.recycle()
-        return out
+    private fun paperWidthPx(size: PaperSize, orientation: Orientation, dpi: Int): Int {
+        val wMm = if (orientation == Orientation.LANDSCAPE) size.heightMm else size.widthMm
+        return mmToPx(wMm.toDouble(), dpi)
+    }
+
+    private fun paperHeightPx(size: PaperSize, orientation: Orientation, dpi: Int): Int {
+        val hMm = if (orientation == Orientation.LANDSCAPE) size.widthMm else size.heightMm
+        val mm  = if (hMm == Float.MAX_VALUE) 297.0 else hMm.toDouble()
+        return mmToPx(mm, dpi)
     }
 
     // ── IO helpers ────────────────────────────────────────────────────────────

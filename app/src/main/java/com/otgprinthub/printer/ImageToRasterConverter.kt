@@ -54,6 +54,34 @@ object ImageToRasterConverter {
      * Solid black test rows for CM.MONOCHROME.
      * 0x00 = dark = full ink = black output.
      */
+
+    /**
+     * Convert bitmap to ESCPR CM.COLOR rows: 3 bytes per pixel (R, G, B).
+     * Same luminance convention as mono: high value = bright = less ink.
+     *   White (255,255,255) → [FF FF FF] → no ink → white output ✓
+     *   Black (0,0,0)       → [00 00 00] → full ink → black output ✓
+     *   Red   (255,0,0)     → [FF 00 00] → no red ink, full G+B ink → printed as red ✓
+     */
+    fun toColorInkRows(bitmap: Bitmap): List<ByteArray> {
+        val width  = bitmap.width
+        val height = bitmap.height
+        Log.d(TAG, "toColorInkRows: ${width}x${height} → ${width * 3} bytes/row (CM.COLOR)")
+        val rows   = ArrayList<ByteArray>(height)
+        val pixels = IntArray(width)
+        for (y in 0 until height) {
+            bitmap.getPixels(pixels, 0, width, 0, y, width, 1)
+            val row = ByteArray(width * 3)
+            for (x in 0 until width) {
+                val p = pixels[x]
+                row[x * 3]     = Color.red(p).toByte()
+                row[x * 3 + 1] = Color.green(p).toByte()
+                row[x * 3 + 2] = Color.blue(p).toByte()
+            }
+            rows.add(row)
+        }
+        return rows
+    }
+
     fun solidBlackInkRows(widthPx: Int, lines: Int): List<ByteArray> {
         Log.d(TAG, "solidBlackInkRows: ${widthPx}x${lines}")
         val row = ByteArray(widthPx) { 0x00.toByte() }  // 0x00 = black (not 0xFF!)

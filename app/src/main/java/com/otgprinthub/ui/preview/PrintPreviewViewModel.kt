@@ -91,7 +91,7 @@ class PrintPreviewViewModel @Inject constructor(
                     }
 
                 if (driver.protocol == PrintProtocol.ESCP2) {
-                    printViaEscpr(fileUri, transport)
+                    printViaEscpr(fileUri, transport, _settings.value)
                 } else {
                     printEngine.print(job, driver, transport).collect { progress ->
                         when (progress) {
@@ -119,15 +119,14 @@ class PrintPreviewViewModel @Inject constructor(
         }
     }
 
-    private suspend fun printViaEscpr(fileUri: Uri, transport: UsbPrinterTransport) {
+    private suspend fun printViaEscpr(fileUri: Uri, transport: UsbPrinterTransport, settings: PrintSettings = PrintSettings()) {
         val helper = PrintHelper(context)
         _printState.value = PrintState.Printing(5, "Rendering document…")
 
-        // content:// URIs may not be readable from ApplicationContext — copy to cache first
         val localUri = resolveToLocalUri(fileUri)
-        AppLogger.i("PrintVM", "printViaEscpr: orig=${fileUri.scheme} local=${localUri.scheme} path=${localUri.path}")
+        AppLogger.i("PrintVM", "printViaEscpr: orig=${fileUri.scheme} local=${localUri.scheme}")
 
-        val result = helper.printUri(localUri, transport) { msg ->
+        val result = helper.printUri(localUri, transport, settings) { msg ->
             _printState.value = PrintState.Printing(50, msg)
         }
         _printState.value = if (result.isSuccess) PrintState.Done
