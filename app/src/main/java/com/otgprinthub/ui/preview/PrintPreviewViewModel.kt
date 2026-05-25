@@ -21,12 +21,16 @@ import com.otgprinthub.print.PrintEngine
 import com.otgprinthub.printer.PrintHelper
 import com.otgprinthub.usb.UsbPrinterManager
 import com.otgprinthub.usb.UsbPrinterTransport
+import com.otgprinthub.util.AppLogger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -118,12 +122,53 @@ class PrintPreviewViewModel @Inject constructor(
     private suspend fun printViaEscpr(fileUri: Uri, transport: UsbPrinterTransport) {
         val helper = PrintHelper(context)
         _printState.value = PrintState.Printing(5, "Rendering document…")
-        val result = helper.printUri(fileUri, transport) { msg ->
+
+        // content:// URIs may not be readable from ApplicationContext — copy to cache first
+        val localUri = resolveToLocalUri(fileUri)
+        AppLogger.i("PrintVM", "printViaEscpr: orig=${fileUri.scheme} local=${localUri.scheme} path=${localUri.path}")
+
+        val result = helper.printUri(localUri, transport) { msg ->
             _printState.value = PrintState.Printing(50, msg)
         }
         _printState.value = if (result.isSuccess) PrintState.Done
                             else PrintState.Failed(result.exceptionOrNull()?.message ?: "Print failed")
         transport.close()
+    }
+
+    private suspend fun resolveToLocalUri(uri: Uri): Uri {
+        if (uri.scheme == "file") return uri
+        return withContext(Dispatchers.IO) {
+            try {
+                val mime = context.contentResolver.getType(uri) ?: ""
+                val ext = when {
+                    mime.contains("pdf")    -> ".pdf"
+                    mime.startsWith("image") -> ".jpg"
+                    mime.startsWith("text")  -> ".txt"
+                    else -> {
+                        val path = uri.path ?: ""
+                        when {
+                            path.endsWith(".pdf", true)  -> ".pdf"
+                            path.endsWith(".png", true)  -> ".png"
+                            path.endsWith(".jpg", true) || path.endsWith(".jpeg", true) -> ".jpg"
+                            path.endsWith(".txt", true)  -> ".txt"
+                            else -> ".bin"
+                        }
+                    }
+                }
+                val dest = File(context.cacheDir, "escpr_${System.currentTimeMillis()}$ext")
+                context.contentResolver.openInputStream(uri)?.use { it.copyTo(dest.outputStream()) }
+                if (dest.exists() && dest.length() > 0) {
+                    AppLogger.i("PrintVM", "Copied to cache: ${dest.name} (${dest.length()} bytes)")
+                    Uri.fromFile(dest)
+                } else {
+                    AppLogger.w("PrintVM", "Cache copy empty/failed, using original URI")
+                    uri
+                }
+            } catch (e: Exception) {
+                AppLogger.e("PrintVM", "resolveToLocalUri failed: ${e.message}")
+                uri
+            }
+        }
     }
 
     fun resetPrintState() { _printState.value = PrintState.Idle }

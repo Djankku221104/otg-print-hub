@@ -167,24 +167,30 @@ class PrintHelper(private val context: Context) {
 
     private fun renderToBitmap(uri: Uri): Bitmap? {
         val mime = context.contentResolver.getType(uri) ?: inferMime(uri)
+        AppLogger.i(TAG, "renderToBitmap: scheme=${uri.scheme} mime=$mime")
         Log.d(TAG, "renderToBitmap: mime=$mime uri=$uri")
-        return when {
+        val result = when {
             mime?.contains("pdf")     == true -> renderPdf(uri)
             mime?.startsWith("image") == true -> renderImage(uri)
             mime?.startsWith("text")  == true -> renderText(uri)
             else -> {
+                AppLogger.w(TAG, "Unknown MIME '$mime', trying image then text")
                 Log.w(TAG, "Unknown MIME, trying image then text")
                 renderImage(uri) ?: renderText(uri)
             }
         }
+        if (result == null) AppLogger.e(TAG, "renderToBitmap NULL — scheme=${uri.scheme} mime=$mime")
+        return result
     }
 
     private fun renderPdf(uri: Uri): Bitmap? {
-        val fd = openFd(uri) ?: return null
+        val fd = openFd(uri)
+        if (fd == null) { AppLogger.e(TAG, "renderPdf: openFd returned null for ${uri.scheme}://${uri.path}"); return null }
         return try {
             PdfRenderer(fd).use { renderer ->
-                if (renderer.pageCount == 0) return null
+                if (renderer.pageCount == 0) { AppLogger.e(TAG, "renderPdf: pageCount=0"); return null }
                 renderer.openPage(0).use { page ->
+                    AppLogger.i(TAG, "PDF page ${page.width}x${page.height}pt → ${widthPx}x${heightPx}px")
                     Log.d(TAG, "PDF page ${page.width}x${page.height}pt → ${widthPx}x${heightPx}px")
                     val bmp = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
                     bmp.eraseColor(Color.WHITE)
@@ -193,6 +199,7 @@ class PrintHelper(private val context: Context) {
                 }
             }
         } catch (e: Exception) {
+            AppLogger.e(TAG, "renderPdf exception: ${e.message}")
             Log.e(TAG, "PDF render failed", e)
             null
         }
@@ -200,13 +207,16 @@ class PrintHelper(private val context: Context) {
 
     private fun renderImage(uri: Uri): Bitmap? {
         return try {
-            val stream = openStream(uri) ?: return null
+            val stream = openStream(uri)
+            if (stream == null) { AppLogger.e(TAG, "renderImage: openStream null for ${uri.scheme}"); return null }
             val raw = BitmapFactory.decodeStream(stream)
             stream.close()
-            raw ?: return null
+            if (raw == null) { AppLogger.e(TAG, "renderImage: BitmapFactory returned null"); return null }
+            AppLogger.i(TAG, "Image decoded: ${raw.width}x${raw.height}")
             Log.d(TAG, "Image: ${raw.width}x${raw.height}")
             toGrayscale(scaleBitmap(raw)).also { if (it !== raw) raw.recycle() }
         } catch (e: Exception) {
+            AppLogger.e(TAG, "renderImage exception: ${e.message}")
             Log.e(TAG, "Image render failed", e)
             null
         }
@@ -214,10 +224,14 @@ class PrintHelper(private val context: Context) {
 
     private fun renderText(uri: Uri): Bitmap? {
         return try {
-            val text = openStream(uri)?.bufferedReader()?.readText() ?: return null
+            val stream = openStream(uri)
+            if (stream == null) { AppLogger.e(TAG, "renderText: openStream null for ${uri.scheme}"); return null }
+            val text = stream.bufferedReader().readText()
+            AppLogger.i(TAG, "Text: ${text.length} chars, ${text.lines().size} lines")
             Log.d(TAG, "Text: ${text.length} chars, ${text.lines().size} lines")
             renderTextToBitmap(text)
         } catch (e: Exception) {
+            AppLogger.e(TAG, "renderText exception: ${e.message}")
             Log.e(TAG, "Text render failed", e)
             null
         }
